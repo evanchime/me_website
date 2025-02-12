@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% load widget_tweaks %}
+
+{% block title %}Login{% endblock %}
+
+{% block extra_styles %} 
+    <link href="{% static 'docs/assets/css/sign-in.css' %}" rel="stylesheet"> 
+{% endblock %}
+
+{% block content %}
+    <main class="form-signin w-100 m-auto">
+        <form method="post" action="." novalidate>
+            {% csrf_token %}
+            <h1 class="h3 mb-3 fw-normal">Please sign in</h1>
+            {% if form.non_field_errors %} 
+                {% for error in form.non_field_errors %} 
+                    <div class="alert alert-primary myAlerts alert-dismissible fade show" id="myLoginErrorAlert" role="alert"> 
+                        <strong>{{ error }}</strong> 
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button> 
+                    </div> 
+                {% endfor %} 
+            {% endif %}
+            <div class="form-floating">
+                {% render_field form.username aria-describedby="emailhelp" type="text" class="form-control" id="floatingInput" placeholder="John" %}
+                <label for="floatingInput">Username</label>
+            </div>
+            <div class="form-floating">
+                {% render_field form.password aria-describedby="passwordhelp" type="password" class="form-control" id="floatingPassword" placeholder="Password" %}
+                <label for="floatingPassword">Password</label>
+            </div>
+        
+            <div class="row mb-4">
+            <div class="col d-flex justify-content-center">
+                <!-- Checkbox -->
+                <div class="form-check text-start my-3">
+                    {% render_field form.remember_me class="form-check-input" type="checkbox" value="remember-me" id="flexCheckDefault" %}
+                    <label class="form-check-label" for="flexCheckDefault">
+                    Remember me
+                </label>
+                </div>
+            </div>
+        
+            <div class="col my-3">
+                <!-- Simple link -->
+                <a class="link-underline link-underline-opacity-0" href="{% url 'password_reset' %}">Forgot password?</a>
+            </div>
+        </div>
+            <button class="btn btn-primary w-100 py-2" type="submit">Sign in</button>
+            <div class="text-center my-3">
+                <p>Not a member? <a class="link-underline link-underline-opacity-0" href="{% url 'signup' %}">Register</a></p>
+            </div>
+        </form>
+    </main>
+{% endblock %}
+    
+{% block extra_scripts %} 
+    <script src="{% static 'docs/assets/js/myAlerts.js' %}"></script>
+{% endblock %}

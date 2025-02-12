@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Polls{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                {% if latest_question_list %}
+                    <div class="col-12 text-center mb-4">
+                        <h1 class="display-6">Click on any of the items below to say your mind</h1>
+                    </div>
+                    <div class="col-12 col-md-8 text-center">
+                        <ul class="list-group list-group-flush">
+                            {% for question in latest_question_list %}
+                                <li class="list-group-item">
+                                    <a href="{% url 'polls_detail' question.id %}" 
+                                    class="text-decoration-none text-primary"
+                                    aria-label="Vote on {{ question.question_text }}">
+                                        {{ question.question_text }}
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% else %}
+                    <div class="col-12 text-center">
+                        <p class="h1">No polls available.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+{% endblock %}
+

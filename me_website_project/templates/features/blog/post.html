@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title }}{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12 col-md-8">
+                <div class="card shadow-sm bg-body-tertiary"> 
+                    <div class="card-header bg-body-secondary"> 
+                        <small class="text-body-secondary">{{ post.date|date:"F j, Y" }} by {{ post.signature }}</small> 
+                    </div>
+                    <div class="card-body">
+                    <h2 class="card-title mb-4">
+                        <a href="/features/blog/{{post.id}}" class="text-decoration-none text-body-emphasis">{{ post.title }}</a> 
+                    </h2>
+                    <div>
+                        <a id="readMoreReadLess" class="text-decoration-none" data-bs-toggle="collapse" href="#post-{{post.id}}" role="button" aria-expanded="false" aria-controls="post-{{post.id}}">
+                            Read More...
+                        </a>
+                        <div id="post-{{post.id}}" class="collapse">
+                        {{ post.body|safe|linebreaks }}
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get the anchor element
+            const readMoreLink = document.getElementById('readMoreReadLess');
+        
+            // Get the collapse element
+            const collapseElement = document.getElementById("post-{{post.id}}");
+        
+            // Event listener for when the collapse is shown
+            collapseElement.addEventListener('show.bs.collapse', () => {
+                readMoreLink.textContent = 'Read Less...'; // Change anchor text to "Read Less..."
+            });
+        
+            // Event listener for when the collapse is hidden
+            collapseElement.addEventListener('hide.bs.collapse', () => {
+                readMoreLink.textContent = 'Read More...'; // Change anchor text to "Read More..."
+            });
+        });
+    </script>
+{% endblock %}

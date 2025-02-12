@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Vote{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12 text-center mb-4">
+                    <h1 class="display-6 fw-bold">{{ question.question_text }}</h1>
+                    {% if error_message %}
+                        <p class="text-danger fw-bold" role="alert">{{ error_message }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="d-flex flex-column flex-md-row p-4 gap-4 py-md-3 align-items-center justify-content-center">
+                    <form action="{% url 'polls_vote' question.id %}" method="post">
+                        {% csrf_token %}
+                        {% for choice in question.choice_set.all %}
+                        <div class="mb-3 form-check">
+                        <input class="form-check-input" type="radio" 
+                        name="choice" 
+                        id="choice {{ forloop.counter }}" 
+                        value="{{ choice.id }}" />
+                        <label class="form-check-label" for="choice {{ forloop.counter }}">
+                            {{ choice.choice_text }}
+                        </label>
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-primary">Vote</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}

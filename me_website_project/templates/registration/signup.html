@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% load widget_tweaks %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+  <main>
+    <div class="container">
+        <div class="row">
+            <div class="modal modal-sheet position-static d-block bg-body p-4 py-md-5" tabindex="-1" role="dialog" id="modalSignin">
+                <div class="modal-dialog" role="document">
+                  <div class="modal-content rounded-4 shadow">
+                    <div class="modal-header p-5 pb-4 border-bottom-0 d-flex justify-content-center">
+                        <h1 class="fw-bold mb-0 px-3 fs-2">Sign up for free</h1>
+                    </div>
+                      
+                    <div class="modal-body p-5 pt-0">
+                      <form method="post" action="." id="signup-form">
+                        {% csrf_token %}
+                        
+                        <button class="w-100 py-2 mb-2 btn btn-outline-secondary rounded-3" type="submit">
+                          <svg class="bi me-1" width="16" height="16"><use xlink:href="#twitter"/></svg>
+                          Sign up with Twitter
+                        </button>
+                        <button class="w-100 py-2 mb-2 btn btn-outline-primary rounded-3" type="submit">
+                          <svg class="bi me-1" width="16" height="16"><use xlink:href="#facebook"/></svg>
+                          Sign up with Facebook
+                        </button>
+                        <button class="w-100 py-2 mb-2 btn btn-outline-secondary rounded-3" type="submit">
+                          <svg class="bi me-1" width="16" height="16"><use xlink:href="#github"/></svg>
+                          Sign up with GitHub
+                        </button>
+                        <div class="d-flex align-items-center my-4">
+                            <hr class="flex-grow-1">
+                            <p class="mx-3 mb-0 text-muted fw-bold">OR</p>
+                            <hr class="flex-grow-1">
+                        </div>
+                          
+                        <div class="form-floating mb-3">
+                            {% render_field form.username class="form-control rounded-3" id="floatingUsername" placeholder="Username" aria-describedby="usernamehelp" minlength="6" maxlength="16" pattern="[A-Za-z0-9 _-]*" title="Only alphanumeric characters (letters and numbers) spaces, hypens and underscores are allowed" required='' %}
+                          <label for="floatingUsername">Username</label>
+                          <small id="usernamehelp" class="form-text text-muted">Username must be 6-16 characters long, only letters, numbers, hypens and underscores, and must not contain spaces, special characters, or emoji.</small>
+                        </div>
+                        {% if form.username.errors %}
+                          {% for error in form.username.errors %}
+                            <div class="alert alert-primary myAlerts alert-dismissible fade show" id="myUsernameExistsAlert" role="alert">
+                                <strong>{{ error }}</strong>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                          {% endfor %}
+                        {% endif %}
+                        
+                        <div class="form-floating mb-3">
+                            {% render_field form.email type="email" class="form-control rounded-3" id="floatingInput" placeholder="name@example.com" aria-describedby="emailhelp" required='' %}
+                          <label for="floatingInput">Email address</label>
+                        </div>
+                        {% if form.email.errors %}
+                          {% for error in form.email.errors %}
+                            <div class="alert alert-primary myAlerts alert-dismissible fade show" id="myEmailExistsAlert" role="alert">
+                                <strong>{{ error }}</strong>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                          {% endfor %}
+                        {% endif %}
+                        <div class="form-floating mb-3">
+                          {% render_field form.password1 type="password" class="form-control rounded-3" id="floatingPassword1" placeholder="Password1" minlength="8" maxlength="20" title="Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&)" aria-describedby="password1help" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}" required='' %}
+                          <label for="floatingPassword1">Password</label>
+                          <small id="password1help" class="form-text text-muted">Password must be 8 - 20 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&).</small>
+                        </div>
+                        <div class="form-floating mb-3">
+                            {% render_field form.password2 type="password" class="form-control rounded-3" id="floatingPassword2" placeholder="Password2" aria-describedby="password2help" required='' %}
+                            <label for="floatingPassword2">Confirm Password</label>
+                        </div>
+                        {% if form.password2.errors %}
+                          {% for error in form.password2.errors %}
+                              <div class="alert alert-primary myAlerts alert-dismissible fade show" id="myPasswordNoMatchAlert" role="alert">
+                                  <strong>{{ error }}</strong>
+                                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                              </div>
+                          {% endfor %}
+                        {% endif %}
+                        <button class="w-100 mb-2 btn btn-lg rounded-3 btn-primary" type="submit">Sign up</button>
+                        <p class="text-center">Already have an account?&nbsp;&nbsp;<a class="link-offset-2 link-underline link-underline-opacity-0" href="{% url 'login' %}">Login</a></p>
+                        
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+        </div>
+      </div>
+  </main>
+{% endblock %}
+
+{% block extra_scripts %} 
+    <script src="{% static 'docs/assets/js/myAlerts.js' %}"></script>
+{% endblock %}

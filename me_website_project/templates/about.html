@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}About{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <section id="meProfile" class="row">
+                <h1 class="display-1 font-monospace fw-bold text-center">Evan Chime</h1>
+                <div class="clearfix my-5">
+                    <img src="{% static 'docs/assets/images/me.jpg' %}" class="col-md-6 float-md-start mb-2 me-3 px-md-3 ms-md-3 img-fluid rounded" alt="Evan">
+                    
+                    <p class="font-monospace fs-5">
+                        I am a highly motivated and results-oriented self-taught programmer with a 
+                        strong foundation in Python, C, C++, JavaScript/Node.js, Bash, and AWK. I am 
+                        eager to leverage acquired skills and Linux Foundation Certified System 
+                        Administrator (LFCS) certification to contribute to a fast-paced IT 
+                        environment as an Entry-Level Software / DevOps Engineer. I possess a passion for 
+                        learning and a strong work ethic, honed through extensive self-study and 
+                        hands-on projects.
+                    </p>
+                    
+                    <p class="font-monospace fs-5">
+                        I am a quick learner and a team player with excellent
+                        communication skills, able to work effectively with diverse teams and
+                        stakeholders. I am always looking for new opportunities to 
+                        grow and develop my skills. I am seeking to apply my technical skills in a 
+                        dynamic and collaborative environment, where I can contribute to the development 
+                        of innovative software solutions to complex problems.
+                    </p>
+        
+                    <p class="font-monospace fs-5">
+                        Aside from problem-solving, I'm a family-oriented man. I enjoy socializing, 
+                        spending time with friends and family. I love good music...they're like diamonds, 
+                        they live forever. I feel it. I'm also passionate about football...I play. 
+                        In addition, I love traveling, reading, watching movies and documentaries, 
+                        and keeping up with the latest fashion and social media trends.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </main>
+{% endblock %}

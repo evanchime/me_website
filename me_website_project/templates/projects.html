@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <div class="row text-center">
+                <h1 class="display-1 text-body-emphasis">Some Of Me Projects</h1>
+            </div>
+            <hr class="featurette-divider">
+            <div class="row featurette my-5">
+                <div id="myCarousel1" class="carousel slide mb-6">
+                    <div class="carousel-indicators">
+                    <button type="button" data-bs-target="#myCarousel1" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+                    <button type="button" data-bs-target="#myCarousel1" data-bs-slide-to="1" aria-label="Slide 2"></button>
+                    </div>
+                    <div class="carousel-inner">
+                    <div class="carousel-item active">
+                        <img src="{% static 'docs/assets/images/ebookstore_screenshot_1.png' %}" class="d-block w-100 h-100 img-fluid" alt="First screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/ebookstore_screenshot_2.png' %}" class="d-block w-100 h-100 img-fluid" alt="Second screenshot">
+                    </div>
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#myCarousel1" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#myCarousel1" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                    </button>
+                </div>
+            </div>
+            <div class="row">
+                <dl id="ebookStore">
+                    <dt>
+                        <h6 class="display-6 font-monospace fw-bold fs-2">
+                            <a class="link-offset-2 link-underline link-underline-opacity-0" href="https://github.com/evanchime/ebookstore" target="_blank">ebookstore</a>
+                            | September 2024 
+                        </h6>
+                    </dt>
+                    <dd>
+                        <p class="font-monospace fs-6">
+                            Python, SQL, Git, GitHub
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            A program that can be used by a bookstore clerk to manage the bookstore's 
+                            inventory. The clerk is able to add new books to the database, update book 
+                            information, delete books from the database and search the database to find 
+                            a specific book.
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            Some of the challenges overcame include getting the title and author fields of 
+                            the database table to do unicode caseless comparisons, making the id field of 
+                            the database table sequential, implementing the book search feature and 
+                            getting accurately the pre-defined records from the file external source 
+                        </p>
+                    </dd>
+                </dl>
+            </div>
+            <hr class="featurette-divider">
+            <div class="row featurette my-5">
+                <div id="myCarousel2" class="carousel slide mb-6">
+                    <div class="carousel-indicators">
+                    <button type="button" data-bs-target="#myCarousel2" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+                    <button type="button" data-bs-target="#myCarousel2" data-bs-slide-to="1" aria-label="Slide 2"></button>
+                    <button type="button" data-bs-target="#myCarousel2" data-bs-slide-to="2" aria-label="Slide 3"></button>
+                    <button type="button" data-bs-target="#myCarousel2" data-bs-slide-to="3" aria-label="Slide 4"></button>
+                    </div>
+                    <div class="carousel-inner">
+                    <div class="carousel-item active">
+                        <img src="{% static 'docs/assets/images/inventory_screenshot_1.png' %}" class="d-block w-100 h-100 img-fluid" alt="First screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/inventory_screenshot_2.png' %}" class="d-block w-100 h-100 img-fluid" alt="Second screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/inventory_screenshot_3.png' %}" class="d-block w-100 h-100 img-fluid" alt="Third screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/inventory_screenshot_4.png' %}" class="d-block w-100 h-100 img-fluid" alt="Fourth screenshot">
+                    </div>
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#myCarousel2" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#myCarousel2" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                    </button>
+                </div>
+            </div>
+            <div class="row">
+                <dl id="inventoryPythonProject">
+                    <dt>
+                        <h6 class="display-6 font-monospace fw-bold fs-2">
+                            <a class="link-offset-2 link-underline link-underline-opacity-0" href="https://github.com/evanchime/inventory" target="_blank">Inventory Python Project</a>
+                            | August 2024
+                        </h6>
+                    </dt>
+                    <dd>
+                        <p class="font-monospace fs-6">
+                            Python, Git, GitHub
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            A python project for managing inventory. It allows store staff members to 
+                            keep track of shoes, their quantities, and other relevant information. Some of 
+                            the features include adding new shoes to the inventory, updating quantity of 
+                            shoes, viewing all shoes in the inventory, determining the product with the 
+                            lowest quantity and restocking, searching products by code, calculating total 
+                            value of each shoe and showing shoes on sale.
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            Some of the challenges overcome were getting the shoes data from the external 
+                            source and converting the data into a shoe object accurately. Also ensuring 
+                            consistency when reading from and writing to the external source, the shoe data  
+                        </p>
+                    </dd>
+                </dl>
+            </div>
+            <hr class="featurette-divider">
+            <div class="row featurette my-5">
+                <div id="myCarousel3" class="carousel slide mb-6">
+                    <div class="carousel-indicators">
+                    <button type="button" data-bs-target="#myCarousel3" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+                    <button type="button" data-bs-target="#myCarousel3" data-bs-slide-to="1" aria-label="Slide 2"></button>
+                    <button type="button" data-bs-target="#myCarousel3" data-bs-slide-to="2" aria-label="Slide 3"></button>
+                    </div>
+                    <div class="carousel-inner">
+                    <div class="carousel-item active">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_1.png' %}" class="d-block w-100 h-100 img-fluid" alt="First screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_2.png' %}" class="d-block w-100 h-100 img-fluid" alt="Second screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_3.png' %}" class="d-block w-100 h-100 img-fluid" alt="Third screenshot">
+                    </div>
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#myCarousel3" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#myCarousel3" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                    </button>
+                </div>
+            </div>
+            <div class="row">
+                <dl id="taskManager">
+                    <dt>
+                        <h6 class="display-6 font-monospace fw-bold fs-2">
+                            <a class="link-offset-2 link-underline link-underline-opacity-0" href="https://github.com/evanchime/task_manager" target="_blank">Task Manager</a>
+                            | July 2024
+                        </h6>
+                    </dt>
+                    <dd>
+                        <p class="font-monospace fs-6">
+                            Python, Git, GitHub
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            A program for a small business to help it manage tasks assigned to each member 
+                            of the team. Some of the features include registering users, adding tasks, 
+                            viewing all tasks, viewing a specific user's task, displaying statistics and 
+                            generating reports
+                        </p>
+                        <p class="font-monospace fs-5">
+                            Some of the challenges overcame was how to ensure the date entered by the user 
+                            was valid and getting the data from the external source accurately 
+                        </p>
+                    </dd>
+                </dl>
+            </div>
+            <hr class="featurette-divider">
+            <div class="row featurette my-5">
+                <div id="myCarousel4" class="carousel slide mb-6">
+                    <div class="carousel-indicators">
+                    <button type="button" data-bs-target="#myCarousel4" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+                    <button type="button" data-bs-target="#myCarousel4" data-bs-slide-to="1" aria-label="Slide 2"></button>
+                    <button type="button" data-bs-target="#myCarousel4" data-bs-slide-to="2" aria-label="Slide 3"></button>
+                    </div>
+                    <div class="carousel-inner">
+                    <div class="carousel-item active">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_1.png' %}" class="d-block w-100 h-100 img-fluid" alt="First screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_2.png' %}" class="d-block w-100 h-100 img-fluid" alt="Second screenshot">
+                    </div>
+                    <div class="carousel-item">
+                        <img src="{% static 'docs/assets/images/task_manager_screenshot_3.png' %}" class="d-block w-100 h-100 img-fluid" alt="Third screenshot">
+                    </div>
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#myCarousel4" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#myCarousel4" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                    </button>
+                </div>
+            </div>
+            <div class="row">
+                <dl id="whatsAppAINodejs">
+                    <dt>
+                        <h6 class="display-6 font-monospace fw-bold fs-2">
+                            <a class="link-offset-2 link-underline link-underline-opacity-0" href="https://github.com/evanchime/deeveedee" target="_blank">
+                                WhatsApp AI Chatbot (Node.js version)
+                            </a>
+                            | February 2024
+                        </h6>
+                    </dt>
+                    <dd>
+                        <p class="font-monospace fs-6">
+                            Node.js, Express.js, WhatsApp Business Platform API, Heroku, OpenAI's Assistant API, Redis, Git, GitHub
+                        </p> 
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            An AI Chatbot written in Node.js. The user sends a message from their WhatsApp 
+                            app. The WhatsApp Platform receives and forwards the message to a webhook. 
+                            The webhook calls a web app, running in Heroku, passing along the user 
+                            message. The web app calls OpenAI's Assistants API with the user message. The 
+                            Assistant's API returns the answer. The web app sends the answer and user 
+                            phone number to the WhatsApp Platform. The WhatsApp platform sends the answer 
+                            back to the user's WhatsApp app
+                        </p>
+                    </dd>
+                    <dd>
+                        <p class="font-monospace fs-5">
+                            The major achievement and challenge that was overcame was getting the chatbot 
+                            to remember previous conversations and not allowing the chatbot and its 
+                            conversations to live forever 
+                        </p>
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </main>
+{% endblock %}

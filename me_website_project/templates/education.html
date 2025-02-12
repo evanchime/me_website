@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}Education{% endblock %}
+
+{% block content %}
+    <main class="my-5">
+        <div class="container">
+            <section id="meEducation" class="row my-5">
+                <h2 class="display-2 font-monospace fw-bold text-center">Education</h2>
+                <article class="my-5" id="softwareEngineeringBootcamp">
+                    <h6 class="display-6 font-monospace fw-bold fs-2">Software Engineering Bootcamp - Ongoing (finishing December 5th)</h6>
+                    <p class="font-monospace fs-5 my-3">
+                        During my time at the 6 months Imperial College London's software engineering bootcamp, 
+                        I acquired a robust foundation in software development. I honed my skills in 
+                        Python, SQL, HTML, and CSS, while solidifying my understanding of core 
+                        computer science principles. Through hands-on projects and rigorous 
+                        coursework, I gained proficiency in Django and Agile methodologies. 
+                        My ability to write efficient algorithms and collaborate effectively within 
+                        teams has equipped me to contribute meaningfully to software development 
+                        initiatives. I completed 59 tasks and 8 capstone projects and one of the 
+                        projects is ebookstore. A program that can be used by a bookstore clerk to 
+                        manage the bookstore's inventory. The clerk is able to add new books to the 
+                        database, update book information, delete books from the database and search 
+                        the database to find a specific book. The technologies used include 
+                        Python, SQL and Git
+                    </p>
+                </article>
+                <article class="" id="devOpsOnAWS">
+                    <h6 
+                        class="display-6 font-monospace fw-bold fs-2">DevOps on AWS - Code, Build and Test; Release and Deploy; Operate and Monitor | Sep 2023
+                    </h6>
+                    <p class="font-monospace fs-5 my-3">
+                        During the 6 weeks online course, I implemented a continuous delivery pipeline on
+                        AWS using CodePipeline, CodeCommit, CodeBuild, and CodeDeploy. Automated the deployment 
+                        process from code repository to production, incorporating manual approval for quality 
+                        control. Utilized CloudFormation to provision and manage the necessary 
+                        infrastructure, including an EC2 instance and S3 bucket. Successfully deployed 
+                        and tested updates to a blog website, demonstrating proficiency in AWS DevOps 
+                        practices
+                    </p>
+                </article>
+                <article class="my-5" id="lFCS">
+                    <h6 class="display-6 font-monospace fw-bold fs-2">
+                        <a class="icon-link icon-link-hover" href="https://www.credly.com/badges/7a34468b-2c46-4074-bafa-273116df96d6/public_url">
+                            <img class="me-2" src="{% static 'docs/assets/images/lfcs-linux-foundation-certified-systems-administrator_small.png' %}" alt="LFCS badge">
+                        </a>
+                        Linux Foundation Certified System Administration | Apr 2023
+                    </h6>
+                    <p class="font-monospace fs-5 my-3">
+                        I completed the Linux Foundation Certified System Administrator (LFCS) 
+                        certification, which validated my expertise in Linux system administration. 
+                        I demonstrated proficiency in managing Linux systems, including configuring 
+                        storage, networking, and security. I also gained experience in shell scripting 
+                        and system maintenance, enabling me to effectively troubleshoot and resolve 
+                        system issues
+                    </p>
+                </article>
+                <article id="embeddedSystems">
+                    <h6 class="display-6 font-monospace fw-bold fs-2">Embedded Systems | May 2016</h6>
+                    <p class="font-monospace fs-5 my-3">
+                        Successfully completed a comprehensive 16 weeks online course in embedded systems 
+                        programming from University of Austin Texas USA, acquiring a strong 
+                        foundation in computer architecture and C language proficiency. I developed 
+                        a solid understanding of fundamental data structures and algorithms, 
+                        enabling efficient problem-solving and code optimization. Applied modular 
+                        design principles and abstraction techniques to create robust and scalable 
+                        embedded systems applications. Gained expertise in writing clean, readable, 
+                        and maintainable C code, adhering to industry best practices. Effectively 
+                        managed memory resources, utilizing both global and stack-based storage to 
+                        optimize performance and avoid memory-related errors. Employed advanced 
+                        debugging techniques and simulators to identify and resolve issues in 
+                        embedded systems code. Successfully interfaced with a variety of peripherals, 
+                        including switches, LEDs, DACs, ADCs, motors, and serial ports, to control 
+                        and monitor external devices. Implemented multithreaded programs to improve 
+                        system responsiveness and handle concurrent tasks efficiently. Utilized ADCs 
+                        and DACs for signal processing and output generation, enabling precise 
+                        control of analog devices. Acquired proficiency in controlling stepper motors 
+                        for precise movement and positioning in embedded systems applications. Gained 
+                        a foundational understanding of IoT concepts, technologies, and their 
+                        applications in the field of embedded systems
+                    </p>
+                </article>
+                <article class="my-5" id="combinatorialMathematics">
+                    <h6 class="display-6 font-monospace fw-bold fs-2">Combinatorial Mathematics | Jan 2015</h6>
+                    <p class="font-monospace fs-5 my-3">
+                        Completed a comprehensive 12 weeks online course in combinatorial mathematics, from 
+                        Tsinghua University, Beijing, China. By the end I gained an understanding of 
+                        the counting principles in our daily lives based on the basic operations "+", 
+                        "-", "*", "/". I was able to apply math to computer science and financial 
+                        analysis. I learnt the science behind combinations of discrete items, and 
+                        understood the history of combinatorics in life and mathematics. I had an 
+                        in-depth study of abstract theories and concrete methods of counting, and a 
+                        deep understanding of the role of combinatorial mathematics in promoting the 
+                        development of computer theory. Some of the topics include generating 
+                        functions, recurrent number serials such as fibonacci number, catalan number, 
+                        and more, pigeon hole principles, inclusion and exclusion principles and polya 
+                        counting based on group theory
+                    </p>
+                </article>
+                <article id="bachelorDegree">
+                    <h6 class="display-6 font-monospace fw-bold fs-2">Bachelor's degree | May 2005</h6>
+                    <p class="font-monospace fs-5 my-3">
+                        Graduated with a Bachelor's degree in Industrial Mathematics from Federal 
+                        University of Technology Owerri Nigeria. Throughout my 5 years academic journey, I 
+                        developed a strong foundation in mathematical principles and applied them to 
+                        real-world problems. My studies emphasized problem-solving, analytical 
+                        thinking, and quantitative analysis, equipping me with a versatile skill set 
+                        that is highly applicable to various fields, including computer science and 
+                        data analysis. I completed a final year project where I conducted a time series 
+                        analysis of vessel arrivals and departures at a seaport to optimize port operations 
+                        and improve efficiency. I also developed a strong foundation in computer programming
+                        and data analysis, which I have continued to build upon through self-study
+                        and hands-on projects
+                    </p>
+                </article>
+            </section>
+        </div>
+    </main>
+  {% endblock %}
