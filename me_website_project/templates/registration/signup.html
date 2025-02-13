@@ -40,7 +40,7 @@
                         </div>
                           
                         <div class="form-floating mb-3">
-                            {% render_field form.username class="form-control rounded-3" id="floatingUsername" placeholder="Username" aria-describedby="usernamehelp" minlength="6" maxlength="16" pattern="[A-Za-z0-9 _-]*" title="Only alphanumeric characters (letters and numbers) spaces, hypens and underscores are allowed" required='' %}
+                            {% render_field form.username class="form-control rounded-3" id="floatingUsername" placeholder="Username" aria-describedby="usernamehelp" minlength="6" maxlength="16" pattern="^[A-Za-z0-9_ -]+$" title="Only alphanumeric characters (letters and numbers) spaces, hypens and underscores are allowed" required='' %}
                           <label for="floatingUsername">Username</label>
                           <small id="usernamehelp" class="form-text text-muted">Username must be 6-16 characters long, only letters, numbers, hypens and underscores, and must not contain spaces, special characters, or emoji.</small>
                         </div>
@@ -66,7 +66,7 @@
                           {% endfor %}
                         {% endif %}
                         <div class="form-floating mb-3">
-                          {% render_field form.password1 type="password" class="form-control rounded-3" id="floatingPassword1" placeholder="Password1" minlength="8" maxlength="20" title="Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&)" aria-describedby="password1help" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}" required='' %}
+                          {% render_field form.password1 type="password" class="form-control rounded-3" id="floatingPassword1" placeholder="Password1" minlength="8" maxlength="20" title="Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&)" aria-describedby="password1help" pattern="^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$" required='' %}
                           <label for="floatingPassword1">Password</label>
                           <small id="password1help" class="form-text text-muted">Password must be 8 - 20 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&).</small>
                         </div>

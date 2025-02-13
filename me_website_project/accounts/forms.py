@@ -136,10 +136,7 @@ class MyPasswordResetConfirmForm(SetPasswordForm):
                     'are allowed' 
                 ),
                 'aria-describedby': 'newPasswordHelpInline',
-                'pattern': (
-                    "(?=.*\d)(?=.*[a-z])(?=.*[A-Z])"
-                    "(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}"
-                )
+                'pattern': r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
             }
         ),
     )
@@ -153,10 +150,7 @@ class MyPasswordResetConfirmForm(SetPasswordForm):
                 'maxlength': 20,
                 'title': 'Re-enter your new password',
                 'aria-describedby': 'newConfirmPasswordHelpInline',
-                'pattern': (
-                    "(?=.*\d)(?=.*[a-z])(?=.*[A-Z])"
-                    "(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}"
-                )
+                'pattern': r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
             }
         ),
     )
