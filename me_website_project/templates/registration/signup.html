@@ -42,7 +42,7 @@
                         <div class="form-floating mb-3">
                             {% render_field form.username class="form-control rounded-3" id="floatingUsername" minlength="4" maxlength="16" placeholder="Username" aria-describedby="usernamehelp" pattern="^(?!.*[-_]{2})[A-Za-z0-9](?!.*[-_]$)[A-Za-z0-9-_]*[A-Za-z0-9]$" required='' %}
                           <label for="floatingUsername">Username</label>
-                          <small id="usernamehelp" class="form-text text-muted">Username must be 4-16 characters, start/end with a letter or number, and cannot contain consecutive hyphens/underscores.".</small>
+                          <small id="usernamehelp" class="form-text text-muted">Username must be 4-16 characters long, start and end with a letter or number, and cannot contain consecutive hyphens or underscores."</small>
                         </div>
                         {% if form.username.errors %}
                           {% for error in form.username.errors %}
