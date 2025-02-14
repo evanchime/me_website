@@ -7,6 +7,14 @@ from django.contrib.auth.models import User
 # from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from django.core.validators import RegexValidator
+
+# Centralized regex and message for password validation
+PASSWORD_REGEX = r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
+PASSWORD_MESSAGE = (
+    "Password must contain 8-20 characters, at least 1 uppercase, "
+    "1 lowercase, 1 digit, and 1 special symbol (@$!%*?&)."
+)
 
 class LoginForm(AuthenticationForm):
     username = forms.CharField(max_length=64)
@@ -15,96 +23,67 @@ class LoginForm(AuthenticationForm):
 
 
 class SignUpForm(UserCreationForm):
-    '''Form for signing up new users'''
     class Meta:
         model = User
         fields = ('username', 'email', 'password1', 'password2')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def clean_password1(self):
-        '''Check if password meets the requirements'''
-        password = self.cleaned_data.get('password1')
+        # Password validation will run first
+        self.fields['password1'].validators.insert(0,
+            RegexValidator(
+                regex=PASSWORD_REGEX,
+                message=PASSWORD_MESSAGE
+            )
+        )
 
-        if not any(c.isdigit() for c in password):
-            raise forms.ValidationError(
-                "Password must contain at least one digit."
+        # Username validation will run first
+        self.fields['username'].validators.insert(0,
+            RegexValidator(
+                regex=r'^(?!.*[-_]{2})[A-Za-z0-9](?!.*[-_]$)[A-Za-z0-9-_]{2,14}[A-Za-z0-9]$',               
+                message=(
+                    "Username must be 4-16 characters long, "
+                    "start and end with an alphanumeric character, "
+                    "and only contain alphanumeric characters, "
+                    "hyphens, and underscores."
+                )
             )
-        if not any(c.islower() for c in password):
-            raise forms.ValidationError(
-                "Password must contain at least one lowercase letter."
-            )
-        if not any(c.isupper() for c in password):
-            raise forms.ValidationError(
-                "Password must contain at least one uppercase letter."
-            )
-        if not any(c in "@$!%*?&" for c in password):
-            raise forms.ValidationError(
-                "Password must contain at least "
-                "one special character (@$!%*?&)."
-            )
+        )
 
-        return password
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username').strip()
+        reserved = ['admin', 'root', 'administrator']
+        if username.lower() in reserved:
+            raise ValidationError("Reserved username. Choose another.")
+        # Optional: Case-insensitive uniqueness check
+        if User.objects.filter(username__iexact=username).exists():
+            raise ValidationError("Username already exists.")
+        return username
         
 
-    def clean_password2(self):
-        '''Check if the passwords match'''
-        password1 = self.cleaned_data.get('password1')
-        password2 = self.cleaned_data.get('password2')
-
-        if password1 and password2 and password1 != password2:
-            raise ValidationError(_
-                ("The passwords don't match. Please try again"), 
-                code='password_mismatch'
-            )
-
-        return password2
-    
-    
     def clean_email(self):
-        '''Check if the email is already in use'''
         email = self.cleaned_data.get('email')
-        # Check if the email is already in use
-        if User.objects.filter(email=email).exists():
-            raise ValidationError(_
-                ("A user with this email address already exists."), 
-                code='email_in_use'
+        if User.objects.filter(email__iexact=email).exists():
+            raise ValidationError(
+                "A user with this email address already exists."
             )
         return email
 
 
 class MyPasswordChangeForm(PasswordChangeForm):
-    '''Form for changing the password'''
-    old_password = forms.CharField(widget=forms.PasswordInput())
-    new_password1 = forms.CharField(widget=forms.PasswordInput())
-    new_password2 = forms.CharField(widget=forms.PasswordInput())
+    '''Form for changing the password with custom validation'''
 
-    # Check passwords match
-    def clean_new_password2(self):
-        password1 = self.cleaned_data.get('new_password1')
-        password2 = self.cleaned_data.get('new_password2')
-
-        if password1 and password2 and password1 != password2:
-            raise ValidationError(_
-                ("The passwords don't match. Please try again"), 
-                code='password_mismatch'
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add regex validation for the new password to run first
+        self.fields['new_password1'].validators.insert(0,
+            RegexValidator(
+                regex=PASSWORD_REGEX,
+                message=PASSWORD_MESSAGE
             )
-
-        return password2
-
-
-    # Check old password is correct
-    def clean_old_password(self):
-        old_password = self.cleaned_data.get('old_password')
-        # Check if the old password is correct
-        if not self.user.check_password(old_password):
-            raise ValidationError(_
-                (
-                    "Your old password was entered incorrectly. " 
-                    "Please enter it again."
-                ), 
-                code='password_incorrect'
-            )
-        return old_password
+        )
     
 
 class MyPasswordResetForm(PasswordResetForm): 
@@ -122,37 +101,38 @@ class MyPasswordResetForm(PasswordResetForm):
     
 
 class MyPasswordResetConfirmForm(SetPasswordForm):
-    '''Form to enter the new password'''
-    new_password1 = forms.CharField(
-        widget=forms.PasswordInput(
-            attrs={
-                'class': 'form-control',
-                'required': 'required',
-                'id': 'inputNewPassword',
-                'minlength': 8,
-                'maxlength': 20,
-                'title': ( 
-                    'Only alphanumeric characters (letters and numbers) ' 
-                    'are allowed' 
-                ),
-                'aria-describedby': 'newPasswordHelpInline',
-                'pattern': r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
-            }
-        ),
-    )
-    new_password2 = forms.CharField(
-        widget=forms.PasswordInput(
-            attrs={
-                'class': 'form-control',
-                'required': 'required',
-                'id': 'inputConfirmPassword',
-                'minlength': 8,
-                'maxlength': 20,
-                'title': 'Re-enter your new password',
-                'aria-describedby': 'newConfirmPasswordHelpInline',
-                'pattern': r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
-            }
-        ),
-    )
+    '''Form to set new password with enhanced validation'''
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Update widget attributes for new_password1
+        self.fields['new_password1'].widget.attrs.update({
+            'class': 'form-control',
+            'id': 'inputNewPassword',
+            'minlength': '8',
+            'maxlength': '20',
+            'title': PASSWORD_MESSAGE,
+            'aria-describedby': 'newPasswordHelpInline',
+            'pattern': PASSWORD_REGEX
+        })
+        
+        # Update widget attributes for new_password2
+        self.fields['new_password2'].widget.attrs.update({
+            'class': 'form-control',
+            'id': 'inputConfirmPassword',
+            'minlength': '8',
+            'maxlength': '20',
+            'title': 'Re-enter your new password',
+            'aria-describedby': 'newConfirmPasswordHelpInline',
+        })
+        
+        # Add server-side validation for new_password1 to run first
+        self.fields['new_password1'].validators.insert(0,
+            RegexValidator(
+                regex=PASSWORD_REGEX,
+                message=PASSWORD_MESSAGE
+            )
+        )
 
     
