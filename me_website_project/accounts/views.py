@@ -19,6 +19,16 @@ from django.contrib.auth import get_user_model
 
 
 def login(request):
+    """
+    Handle user login authentication and session management.
+    
+    Processes login form submissions, authenticates users, manages 
+    session expiration based on 'remember me' selection, and redirects 
+    to protected pages users tried to access before logging in.
+    
+    Uses LoginForm for validation and implements Post/Redirect/Get 
+    pattern to prevent duplicate form submissions.
+    """
     if request.method == 'POST':
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
@@ -30,7 +40,6 @@ def login(request):
                 auth_login(request, user)
                 request.session.set_expiry(1209600 if remember_me else 0)
                 request.session.modified = True
-                # Redirect to the page the user was trying to access
                 # Redirect to about page the user was trying to access
                 if request.session.pop('about', None):
                     return redirect('about')
@@ -105,6 +114,13 @@ def login(request):
 
 
 def signup(request):
+    """
+    Handle new user registration process.
+    
+    Validates user registration data using SignUpForm, saves new users,
+    and redirects to login page on success. Implements Post/Redirect/Get
+    pattern to maintain form state between submissions.
+    """
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
@@ -132,6 +148,13 @@ def signup(request):
 
 @login_required
 def password_change(request):
+    """
+    Handle password changes for authenticated users.
+    
+    Requires login, validates password change form, updates user password,
+    and maintains session authentication. Uses MyPasswordChangeForm for
+    validation and implements Post/Redirect/Get pattern.
+    """
     if request.method == 'POST':
         form = MyPasswordChangeForm(request.user, request.POST)
         if form.is_valid():
@@ -162,6 +185,13 @@ def password_change(request):
 
 
 def password_reset(request):
+    """
+    Initiate password reset process via email.
+    
+    Validates email address using MyPasswordResetForm, sends password reset
+    email, and redirects to confirmation page. Implements Post/Redirect/Get
+    pattern to maintain form state between submissions.
+    """
     if request.method == 'POST':
         form = MyPasswordResetForm(request.POST)
         if form.is_valid():
@@ -193,6 +223,13 @@ def password_reset(request):
 User = get_user_model()
 
 def password_reset_confirm(request, uidb64, token):
+    """
+    Finalize password reset process with token validation.
+    
+    Decodes user ID from URL, validates reset token, and processes password
+    reset confirmation form. Uses MyPasswordResetConfirmForm for validation
+    and implements Post/Redirect/Get pattern.
+    """
     try:
         # Decode the uidb64 to get the user id
         uid = force_str(urlsafe_base64_decode(uidb64))
