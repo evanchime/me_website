@@ -1,8 +1,9 @@
 """
 URL configuration for the education app.
 
-Defines the root endpoint for the education page when included under '/education/' 
-in the project's main URLs. The actual accessible path will be '/education/'.
+Defines the root endpoint for the education page when included under 
+'/education/' in the project's main URLs. The actual accessible path 
+will be '/education/'.
 """
 
 from django.urls import path
