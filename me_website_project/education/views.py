@@ -9,8 +9,8 @@ from django.urls import reverse
 def education(request):
     """
     Display the education page for authenticated users. Redirects 
-    unauthenticated users to login page while preserving the education page 
-    request intent.
+    unauthenticated users to login page while preserving the education 
+    page request intent.
     
     Args:
         request: HttpRequest object containing session/metadata
