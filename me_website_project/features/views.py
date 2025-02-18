@@ -1,11 +1,33 @@
+"""
+Django view functions for blog and polls features with authentication 
+handling.
+
+This module contains view functions that handle HTTP requests for blog 
+posts and polls. All views require user authentication, redirecting 
+unauthenticated users to the login page while preserving state through 
+session variables. Includes full CRUD operations for blog posts and 
+complete voting workflow for polls.
+"""
+
 from django.shortcuts import get_object_or_404, render
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from .models import Question, Choice, Post
 
-# Create your views here.
-
 def blog_index(request):
+    """Display latest blog posts with authentication check.
+    
+    Args:
+        request: HttpRequest object
+        
+    Returns:
+        Rendered blog index template with latest 5 posts if 
+        authenticated, redirects to login page with session preservation 
+        if not authenticated.
+        
+    Session Variables:
+        Sets 'blog_index' flag if unauthenticated
+    """
     if not request.user.is_authenticated:
         request.session['blog_index'] = 'yes'
         return HttpResponseRedirect(reverse('login'))
@@ -13,6 +35,19 @@ def blog_index(request):
     return render(request, "features/blog/blog.html", {"object_list": posts})
 
 def blog_detail(request, pk):
+    """Show detailed view of individual blog post.
+    
+    Args:
+        request: HttpRequest object
+        pk: Primary key of blog post to display
+        
+    Returns:
+        Rendered blog detail template if authenticated,
+        redirects to login while preserving post ID if not.
+        
+    Session Variables:
+        Sets 'blog_detail_id' with post PK if unauthenticated
+    """
     if not request.user.is_authenticated:
         request.session['blog_detail_id'] = pk
         return HttpResponseRedirect(reverse('login'))
@@ -20,6 +55,19 @@ def blog_detail(request, pk):
     return render(request, "features/blog/post.html", {"post": post})
 
 def polls_index(request):
+    """Display latest poll questions with authentication check.
+    
+    Args:
+        request: HttpRequest object
+        
+    Returns:
+        Rendered polls index template with latest 5 questions if 
+        authenticated, redirects to login with session preservation if 
+        not.
+        
+    Session Variables:
+        Sets 'polls_index' flag if unauthenticated
+    """
     if not request.user.is_authenticated:
         request.session['polls_index'] = 'yes'
         return HttpResponseRedirect(reverse('login'))
@@ -27,49 +75,78 @@ def polls_index(request):
     context = {'latest_question_list': latest_question_list}
     return render(request, "features/polls/poll.html", context)
 
-def polls_detail(request, question_id): 
+def polls_detail(request, question_id):
+    """Show voting form for specific poll question.
+    
+    Args:
+        request: HttpRequest object
+        question_id: ID of poll question to display
+        
+    Returns:
+        Rendered poll detail template if authenticated,
+        redirects to login while preserving question ID if not.
+        
+    Session Variables:
+        Sets 'polls_detail_question_id' if unauthenticated
+    """
     if not request.user.is_authenticated: 
-        # If user is not authenticated, but is about to vote, send them 
-        # to the login page, after saving the question_id
         request.session['polls_detail_question_id'] = question_id
         return HttpResponseRedirect(reverse('login'))
     question = get_object_or_404(Question, pk=question_id) 
-    return render(
-        request, 'features/polls/detail.html', {'question': question}
-    )
+    return render(request, 'features/polls/detail.html', {'question': question})
 
 def polls_results(request, question_id):
+    """Display voting results for specific poll question.
+    
+    Args:
+        request: HttpRequest object
+        question_id: ID of poll question to show results for
+        
+    Returns:
+        Rendered results template if authenticated,
+        redirects to login with question ID preservation if not.
+        
+    Session Variables:
+        Sets 'polls_results_question_id' if unauthenticated
+    """
     if not request.user.is_authenticated:
         request.session['polls_results_question_id'] = question_id
         return HttpResponseRedirect(reverse('login'))
     question = get_object_or_404(Question, pk=question_id)
-    return render(
-        request, 'features/polls/results.html', {'question': question}
-    )
+    return render(request, 'features/polls/results.html', {'question': question})
 
 def polls_vote(request, question_id):
+    """Process voting submissions for poll questions.
+    
+    Args:
+        request: HttpRequest object containing POST data
+        question_id: ID of poll question being voted on
+        
+    Returns:
+        - Redirect to results page after successful vote
+        - Re-display voting form with error message if no choice 
+        selected
+        - Redirect to login if unauthenticated with question ID 
+        preservation
+        
+    Raises:
+        KeyError: If no choice selected in POST data
+        Choice.DoesNotExist: If invalid choice ID submitted
+        
+    Session Variables:
+        Sets 'polls_vote_question_id' if unauthenticated
+    """
     if not request.user.is_authenticated:
         request.session['polls_vote_question_id'] = question_id
         return HttpResponseRedirect(reverse('login'))
     question = get_object_or_404(Question, pk=question_id)
     try:
-        selected_choice = question.choice_set.get(
-            pk=request.POST['choice']
-        )
+        selected_choice = question.choice_set.get(pk=request.POST['choice'])
     except (KeyError, Choice.DoesNotExist):
-        # Redisplay the question voting form
         return render(request, 'features/polls/detail.html', {
-                'question': question,
-                'error_message': "You didn't select a choice."
-            }
-        )
-    else:
-        selected_choice.votes += 1
-        selected_choice.save()
-        # Always return an HttpResponseRedirect after successfully
-        # dealing with POST data. This prevents data from being
-        # posted twice if a
-        # user hits the Back button.
-        return HttpResponseRedirect(
-            reverse('polls_results', args=(question_id,))
-        )
+            'question': question,
+            'error_message': "You didn't select a choice."
+        })
+    selected_choice.votes += 1
+    selected_choice.save()
+    return HttpResponseRedirect(reverse('polls_results', args=(question_id,)))
