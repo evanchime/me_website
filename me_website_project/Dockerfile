@@ -1,0 +1,44 @@
+# Stage 1: Builder (install dependencies)
+FROM python:3.11-slim as builder
+
+# Install essential build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime (lean production image)
+FROM python:3.11-slim
+
+# Install runtime dependencies for databases
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libmariadb3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PATH="/app/.local/bin:${PATH}"
+
+# Create non-root user
+RUN useradd -m appuser && mkdir /app && chown appuser:appuser /app
+USER appuser
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --chown=appuser:appuser --from=builder /root/.local /app/.local
+
+# Copy entrypoint script
+COPY --chown=appuser:appuser entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["gunicorn", "me_website_project.wsgi:application", "--bind", "0.0.0.0:8000"]
