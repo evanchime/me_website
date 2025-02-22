@@ -33,8 +33,8 @@ SECRET_KEY = env.str('ME_WEBSITE_DJANGO_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DEBUG', default=False)
 
-
-ALLOWED_HOSTS = []
+# Fetch ALLOWED_HOSTS environment variable value and parse as a list.
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 
 # Application definition
@@ -137,7 +137,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 
 # In production, collectstatic copies files here:
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
