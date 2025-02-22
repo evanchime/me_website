@@ -14,12 +14,14 @@ from pathlib import Path
 import os
 import environ
 
-env = environ.Env() # Load environment variables
-env.read_env() # Read .env file if it exists
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+ # Load environment variables from environment or .env file if it exists
+env = environ.Env()
+env.read_env(os.path.join(BASE_DIR, ".env"))
 
 
 # Quick-start development settings - unsuitable for production
