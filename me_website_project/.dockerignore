@@ -1,0 +1,23 @@
+# Version control
+.git
+.gitignore
+
+# Python cache and compiled files
+__pycache__/
+
+# Virtual environments
+.venv/
+
+# Environment files
+.env
+
+# Docker files (prevent recursive copies)
+Dockerfile
+docker-compose*
+.dockerignore
+
+# Local databases
+*.sqlite3
+
+# Local development directories
+staticfiles/
