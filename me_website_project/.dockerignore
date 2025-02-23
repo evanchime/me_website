@@ -14,6 +14,7 @@ __pycache__/
 # Docker files (prevent recursive copies)
 Dockerfile
 docker-compose*
+compose*
 .dockerignore
 
 # Local databases
