@@ -15,7 +15,7 @@ elif [[ $DATABASE_URL == mysql* ]]; then
 fi
 
 # Django setup
-python manage.py migrate
+python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
 # Start server
