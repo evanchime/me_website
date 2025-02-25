@@ -36,8 +36,10 @@ WORKDIR /app
 # Copy installed packages from builder
 COPY --chown=appuser:appuser --from=builder /root/.local /app/.local
 
-# Copy entrypoint script
-COPY --chown=appuser:appuser entrypoint.sh /app/entrypoint.sh
+# Copy application code
+COPY --chown=appuser:appuser . .
+
+# Set entrypoint script permissions and command
 RUN chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
