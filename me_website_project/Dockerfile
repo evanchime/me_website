@@ -17,15 +17,16 @@ FROM python:3.11-slim
 
 # Install runtime dependencies for databases
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    libmariadb3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+libpq5 \
+libmariadb3 \
+ca-certificates \
+&& rm -rf /var/lib/apt/lists/*
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV PATH="/app/.local/bin:${PATH}"
+ENV PYTHONPATH="${PYTHONPATH}:/app/.local/lib/python3.11/site-packages"
 
 # Create non-root user
 RUN useradd -m appuser && mkdir /app && chown appuser:appuser /app
