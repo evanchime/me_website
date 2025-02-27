@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 libpq5 \
 libmariadb3 \
 postgresql-client \
-mysql-client \
+default-mysql-client \
+mariadb-client \
 ca-certificates \
 && rm -rf /var/lib/apt/lists/*
 
