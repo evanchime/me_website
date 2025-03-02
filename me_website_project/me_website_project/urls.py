@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
-
+from health.views import SecureHealthCheckView 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -31,4 +31,5 @@ urlpatterns = [
     path("education/", include("education.urls")),
     path("contact/", include("contact.urls")),
     path("features/", include("features.urls")),
+    path('health/', SecureHealthCheckView.as_view()),
 ]
