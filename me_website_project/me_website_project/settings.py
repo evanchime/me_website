@@ -167,3 +167,6 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
 # You might need an Google app password for security
 EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD') 
+
+# Tell Django to trust the X-Forwarded-Proto header
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
