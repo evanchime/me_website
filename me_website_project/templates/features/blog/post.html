@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% load static %}
+
 {% block title %}{{ post.title }}{% endblock %}
 
 {% block content %}
@@ -16,7 +18,7 @@
                         <a href="/features/blog/{{post.id}}" class="text-decoration-none text-body-emphasis">{{ post.title }}</a> 
                     </h2>
                     <div>
-                        <a id="readMoreReadLess" class="text-decoration-none" data-bs-toggle="collapse" href="#post-{{post.id}}" role="button" aria-expanded="false" aria-controls="post-{{post.id}}">
+                        <a id="readMoreReadLess" class="text-decoration-none" data-bs-toggle="collapse" data-post-id="{{ post.id }}" href="#post-{{post.id}}" role="button" aria-expanded="false" aria-controls="post-{{post.id}}">
                             Read More...
                         </a>
                         <div id="post-{{post.id}}" class="collapse">
@@ -31,23 +33,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Get the anchor element
-            const readMoreLink = document.getElementById('readMoreReadLess');
-        
-            // Get the collapse element
-            const collapseElement = document.getElementById("post-{{post.id}}");
-        
-            // Event listener for when the collapse is shown
-            collapseElement.addEventListener('show.bs.collapse', () => {
-                readMoreLink.textContent = 'Read Less...'; // Change anchor text to "Read Less..."
-            });
-        
-            // Event listener for when the collapse is hidden
-            collapseElement.addEventListener('hide.bs.collapse', () => {
-                readMoreLink.textContent = 'Read More...'; // Change anchor text to "Read More..."
-            });
-        });
-    </script>
+    <script src="{% static 'docs/assets/js/readMoreReadLess.js' %}"></script>
 {% endblock %}
