@@ -13,9 +13,13 @@ from django.shortcuts import get_object_or_404, render
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from .models import Question, Choice, Post
+from django.views.decorators.cache import never_cache
 
+
+@never_cache
 def blog_index(request):
-    """Display latest blog posts with authentication check.
+    """Display latest blog posts with authentication check. Ensure that 
+    no intermediary (like a browser or proxy server) caches the response
     
     Args:
         request: HttpRequest object
@@ -34,8 +38,11 @@ def blog_index(request):
     posts = Post.objects.order_by('-date')[:5]
     return render(request, "features/blog/blog.html", {"object_list": posts})
 
+
+@never_cache
 def blog_detail(request, pk):
-    """Show detailed view of individual blog post.
+    """Show detailed view of individual blog post. Ensure that no 
+    intermediary (like a browser or proxy server) caches the response
     
     Args:
         request: HttpRequest object
@@ -54,8 +61,12 @@ def blog_detail(request, pk):
     post = get_object_or_404(Post, pk=pk)
     return render(request, "features/blog/post.html", {"post": post})
 
+
+@never_cache
 def polls_index(request):
-    """Display latest poll questions with authentication check.
+    """Display latest poll questions with authentication check. Ensure 
+    that no intermediary (like a browser or proxy server) caches the 
+    response
     
     Args:
         request: HttpRequest object
@@ -75,8 +86,11 @@ def polls_index(request):
     context = {'latest_question_list': latest_question_list}
     return render(request, "features/polls/poll.html", context)
 
+
+@never_cache
 def polls_detail(request, question_id):
-    """Show voting form for specific poll question.
+    """Show voting form for specific poll question. Ensure that no 
+    intermediary (like a browser or proxy server) caches the response
     
     Args:
         request: HttpRequest object
@@ -95,8 +109,11 @@ def polls_detail(request, question_id):
     question = get_object_or_404(Question, pk=question_id) 
     return render(request, 'features/polls/detail.html', {'question': question})
 
+
+@never_cache
 def polls_results(request, question_id):
-    """Display voting results for specific poll question.
+    """Display voting results for specific poll question. Ensure that no 
+    intermediary (like a browser or proxy server) caches the response
     
     Args:
         request: HttpRequest object
@@ -115,8 +132,11 @@ def polls_results(request, question_id):
     question = get_object_or_404(Question, pk=question_id)
     return render(request, 'features/polls/results.html', {'question': question})
 
+
+@never_cache
 def polls_vote(request, question_id):
-    """Process voting submissions for poll questions.
+    """Process voting submissions for poll questions. Ensure that no 
+    intermediary (like a browser or proxy server) caches the response
     
     Args:
         request: HttpRequest object containing POST data
