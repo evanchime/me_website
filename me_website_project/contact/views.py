@@ -5,12 +5,15 @@ Views for handling contact page requests with authentication checks.
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 
+@never_cache
 def contact(request):
     """
     Display the contact page for authenticated users. Redirects 
     unauthenticated users to login page while preserving the contact page 
-    request intent.
+    request intent. Ensure that no intermediary (like a browser or 
+    proxy server) caches the response
     
     Args:
         request: HttpRequest object containing session/metadata
