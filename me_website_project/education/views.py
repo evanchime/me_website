@@ -5,12 +5,16 @@ Views for handling education page requests with authentication checks.
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 
+@never_cache
 def education(request):
     """
     Display the education page for authenticated users. Redirects 
     unauthenticated users to login page while preserving the education 
-    page request intent.
+    page request intent. Ensure that no intermediary (like a browser or 
+    proxy server) caches the response
+    
     
     Args:
         request: HttpRequest object containing session/metadata
