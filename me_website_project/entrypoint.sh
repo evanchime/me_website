@@ -40,7 +40,7 @@ elif [[ "$DATABASE_URL" == mariadb* ]]; then
 fi
 
 # Run Django management commands
-python manage.py migrate --noinput
-python manage.py collectstatic --noinput --clear
+python3 manage.py migrate --noinput
+python3 manage.py collectstatic --noinput --clear
 
 exec "$@"
