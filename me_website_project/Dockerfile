@@ -32,14 +32,14 @@ ENV PYTHONUNBUFFERED 1
 ENV PATH="/app/.local/bin:${PATH}"
 ENV PYTHONPATH="${PYTHONPATH}:/app/.local/lib/python3.11/site-packages"
 
-# Create app directory and set ownership
-RUN mkdir /app && chown appuser:appuser /app
+# Create non-root user, app directory and set ownership
+RUN useradd -m appuser && mkdir /app && chown appuser:appuser /app
 
 # Create staticfiles directory with proper permissions
 RUN mkdir -p /app/staticfiles && chown appuser:appuser /app/staticfiles
 
-# Create non-root user and grant ownership
-RUN useradd -m appuser && chown -R appuser:appuser /app
+# Grant ownership
+RUN chown -R appuser:appuser /app
 USER appuser
 
 WORKDIR /app
