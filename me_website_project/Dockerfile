@@ -24,6 +24,7 @@ postgresql-client \
 default-mysql-client \
 mariadb-client \
 ca-certificates \
+wget \
 && rm -rf /var/lib/apt/lists/*
 
 # Environment variables
