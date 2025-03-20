@@ -17,7 +17,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
-# from .views import CustomHealthCheckView
 from .views import health_check
 
 urlpatterns = [
