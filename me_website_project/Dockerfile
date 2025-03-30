@@ -34,11 +34,22 @@ ENV PATH="/app/.local/bin:${PATH}"
 
 ENV PYTHONPATH="/app/.local/lib/python3.11/site-packages${PYTHONPATH:+:${PYTHONPATH}}"
 
+# Fallback UID if not provided
+ARG USER_ID=1000  
+# Fallback GID if not provided
+ARG GROUP_ID=1000
+
 # Create non-root user, app directory and set ownership
-RUN useradd -m appuser && mkdir /app && chown appuser:appuser /app
+# Ensure the container runs with the same user as the host, avoiding permission issues
+RUN groupadd -g $GROUP_ID appuser && \
+    useradd -u $USER_ID -g appuser -m appuser && \
+    mkdir /app && chown appuser:appuser /app
 
 # Create staticfiles directory with proper permissions
 RUN mkdir -p /app/staticfiles && chown appuser:appuser /app/staticfiles
+
+# Set directory permissions
+RUN chmod -R 775 /app/staticfiles
 
 # Grant ownership
 RUN chown -R appuser:appuser /app
