@@ -1,9 +1,12 @@
 services:
   web:
-    # image: my_image
+    # image: evanchime/me_website:latest
     build:
       context: ./me_website_project
       dockerfile: Dockerfile
+      args:
+        - USER_ID=${USER_ID}     # Default to 1000
+        - GROUP_ID=${GROUP_ID}   # Default to 1000
     env_file:
       - .env
     volumes:
@@ -27,6 +30,7 @@ services:
     volumes:
       - static_volume:/app/staticfiles
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      # - ./nginx/nginx.conf:/etc/nginx/nginx.conf:Z # Uncomment for SELinux
     depends_on:
       web:
         condition: service_healthy

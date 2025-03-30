@@ -1,5 +1,5 @@
 # Stage 1: Builder (install dependencies)
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Install essential build dependencies
 RUN apt-get update && apt-get install -y \
@@ -28,10 +28,11 @@ curl \
 && rm -rf /var/lib/apt/lists/*
 
 # Environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.local/bin:${PATH}"
-ENV PYTHONPATH="${PYTHONPATH}:/app/.local/lib/python3.11/site-packages"
+
+ENV PYTHONPATH="/app/.local/lib/python3.11/site-packages${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Create non-root user, app directory and set ownership
 RUN useradd -m appuser && mkdir /app && chown appuser:appuser /app
