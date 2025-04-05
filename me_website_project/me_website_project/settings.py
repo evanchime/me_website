@@ -173,6 +173,11 @@ CSRF_TRUSTED_ORIGINS = env.list(
 # Tell Django to trust the X-Forwarded-Proto header
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Use X-Forwarded-Host and X-Forwarded-Port headers to get the original 
+# host and port
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+
 # Disable these for development only
 if DEBUG:
     SESSION_COOKIE_SECURE = False
