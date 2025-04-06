@@ -176,7 +176,7 @@ After starting the containers, open your browser to:
 ![Screenshot 3](screenshots/me_website_screenshot_3.png)
 ![Screenshot 4](screenshots/me_website_screenshot_4.png)
 
-## Environmeent
+## Environment
 
 For detailed documentation of all environment variables, see [ENVIRONMENT](ENVIRONMENT.md)
 
