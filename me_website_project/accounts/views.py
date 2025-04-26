@@ -40,29 +40,8 @@ def login(request):
                 auth_login(request, user)
                 request.session.set_expiry(1209600 if remember_me else 0)
                 request.session.modified = True
-                # Redirect to about page the user was trying to access
-                if request.session.pop('about', None):
-                    return redirect('about')
-                # Redirect to contact page the user was trying to access
-                elif request.session.pop('contact', None):
-                    return redirect('contact')
-                # Redirect to skills page the user was trying to access
-                elif request.session.pop('skills', None):
-                    return redirect('skills')
-                # Redirect to projects page the user was trying to 
-                # access
-                elif request.session.pop('projects', None):
-                    return redirect('projects')
-                # Redirect to education page the user was trying to 
-                # access
-                elif request.session.pop('education', None):
-                    return redirect('education')
-                # Redirect to experience page the user was trying to
-                # access
-                elif request.session.pop('experience', None):
-                    return redirect('experience')
                 # Redirect to blog page the user was trying to access
-                elif request.session.pop('blog_index', None):
+                if request.session.pop('blog_index', None):
                     return redirect('blog_index')
                 # Redirect to blog page the user was trying to access
                 elif request.session.get('blog_detail_id', None):
