@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'education',
     'contact',
     'features',
+    'core',
     'widget_tweaks',
 ]
 
@@ -211,3 +212,4 @@ else:
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
     CSRF_COOKIE_HTTPONLY = True   
+
