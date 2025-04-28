@@ -14,10 +14,17 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from . import views
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
-from .views import health_check
+from django.shortcuts import render
+
+# Error handlers
+handler400 = 'views.bad_request'
+handler403 = 'views.permission_denied'
+handler404 = 'views.page_not_found'
+handler500 = 'views.server_error'
 
 urlpatterns = [
     path('admin-ndima/', admin.site.urls),
@@ -33,3 +40,4 @@ urlpatterns = [
     path("features/", include("features.urls")),
     path("ht/", health_check, name="health_check"),
 ]
+
