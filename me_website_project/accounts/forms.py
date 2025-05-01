@@ -12,10 +12,12 @@ from django.contrib.auth.forms import (
     PasswordResetForm, SetPasswordForm
 )
 from django import forms
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
+
+User = get_user_model()
 
 # Shared password validation rules
 PASSWORD_REGEX = r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$'
@@ -26,13 +28,25 @@ PASSWORD_MESSAGE = (
 
 class LoginForm(AuthenticationForm):
     """
-    Custom login form with remember me functionality. Extends Django's 
-    default AuthenticationForm with additional fields and styling.
+    Custom login form with case-insensitive username and remember me 
+    functionality. Extends Django's default AuthenticationForm with additional 
+    fields and styling.
     """
     username = forms.CharField(max_length=64)
     password = forms.CharField(widget=forms.PasswordInput)
     remember_me = forms.BooleanField(required=False)
 
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        try:
+            # Perform case-insensitive lookup
+            user = User.objects.get(username__iexact=username)
+        except User.DoesNotExist:
+            # Return original username if not found (authentication will fail)
+            return username
+        else:
+            # Return the actual username from database
+            return user.username
 
 class SignUpForm(UserCreationForm):
     """
