@@ -96,6 +96,11 @@ To run this project locally, follow these steps:
 2. Update `.env` with your settings (e.g., `SECRET_KEY`, `DEBUG=False`).
 3. Don't forget to uncomment image/build section respectively in the compose file
 
+#### Docker Image
+```bash
+evanchime/me_website
+```
+
 #### Docker Compose
 1. Starting:
    ```bash
