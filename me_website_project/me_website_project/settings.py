@@ -160,10 +160,6 @@ AWS_DEFAULT_ACL = None
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-#if AWS_S3_CUSTOM_DOMAIN:
-#    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
-#else:
-#    STATIC_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/static/'
 if env.str('AWS_S3_CUSTOM_DOMAIN'):
     STATIC_URL = f'https://{env.str('AWS_S3_CUSTOM_DOMAIN')}/static/'
 elif env.str('AWS_STORAGE_BUCKET_NAME'):
