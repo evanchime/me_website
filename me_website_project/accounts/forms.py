@@ -37,7 +37,7 @@ class LoginForm(AuthenticationForm):
     remember_me = forms.BooleanField(required=False)
 
     def clean_username(self):
-        username = self.cleaned_data.get('username')
+        username = self.cleaned_data.get('username').strip()
         try:
             # Perform case-insensitive lookup
             user = User.objects.get(username__iexact=username)
