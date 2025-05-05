@@ -1,3 +1,12 @@
+"""
+Custom Django forms for user authentication and password management.
+
+Contains extended versions of Django's built-in auth forms with 
+additional validation, security features, and HTML5 attributes for 
+client-side validation. Includes login, registration, password change, 
+and password reset forms.
+"""
+
 from django.contrib.auth.forms import (
     AuthenticationForm, UserCreationForm, PasswordChangeForm,
     PasswordResetForm, SetPasswordForm
