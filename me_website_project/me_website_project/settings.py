@@ -101,7 +101,7 @@ DATABASES = {
         'NAME': env.str('POSTGRES_DB'),
         'USER': env.str('POSTGRES_USER'),
         'PASSWORD': env.str('POSTGRES_PASSWORD'),
-        'HOST': 'me-webiste-database-instance.ccofodoxabmw.eu-west-2.rds.amazonaws.com',
+        'HOST': env.str('POSTGRES_HOST'), 
         'PORT': '5432',
         'OPTIONS': {
             'sslmode': 'require',
