@@ -19,7 +19,7 @@ The website lives [`here`](https://www.iplayishow.com) in AWS. It's been maintai
 
 ### The Architecture Diagram
 
-![AWS Architecture](AWS_architecture.drawio.png)
+![AWS Architecture](screenshots/AWS_architecture.drawio.png)
 
 ####  Data Flow:
 1. User initiates request -> CloudFront
