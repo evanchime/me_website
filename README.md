@@ -6,11 +6,28 @@ Welcome to my personal website repository! This project contains the source code
 
 - [Introduction](#introduction)
 - [Features](#features)
+- [AWS](#aws)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Contributing](#contributing)
 - [Environment](#environment)
 - [License](#license)
+
+## AWS
+
+The website lives [`here`](https://www.iplayishow.com) in AWS. It's been maintained on the [`aws`](https://github.com/evanchime/me_website/tree/aws) branch
+
+### The Architecture Diagram
+
+![AWS Architecture](AWS_architecture.drawio.png)
+
+####  Data Flow:
+1. User initiates request -> CloudFront
+2. CloudFront routes:
+    - /static/*          -> S3 Bucket
+    - /* (dynamic)       -> EC2/Nginx -> Django
+    - 5xx errors         -> S3 Error Bucket
+3. EC2 application connects to RDS PostgreSQL
 
 ## Introduction
 
