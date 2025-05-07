@@ -6,12 +6,16 @@ Welcome to my personal website repository! This project contains the source code
 
 - [Introduction](#introduction)
 - [Features](#features)
-- [AWS](#aws)
 - [Installation](#installation)
+- [AWS](#aws)
 - [Usage](#usage)
 - [Contributing](#contributing)
 - [Environment](#environment)
 - [License](#license)
+
+## Introduction
+
+This website serves as my personal portfolio and blog. It showcases my projects, skills, and thoughts on various topics.
 
 ## AWS
 
@@ -28,10 +32,6 @@ The website lives [`here`](https://www.iplayishow.com) in AWS. It's been maintai
     - /* (dynamic)       -> EC2/Nginx -> Django
     - 5xx errors         -> S3 Error Bucket
 3. EC2 application connects to RDS PostgreSQL
-
-## Introduction
-
-This website serves as my personal portfolio and blog. It showcases my projects, skills, and thoughts on various topics.
 
 ## Features
 
