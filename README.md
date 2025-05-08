@@ -29,7 +29,7 @@ This website serves as my personal portfolio and blog. It showcases my projects,
 - Search box for specific keywords (Coming soon)
 - Contact form for feedback (Coming soon)
 - Newsletter subscription form (Coming soon)
-- Third-party sign-up (Coming soon)
+- Third-party sign-up/sign-in (Coming soon)
 
 ## AWS
 
