@@ -15,7 +15,7 @@ python -c 'from django.core.management.utils import get_random_secret_key; print
 - DEBUG=False  # Always False in production. True in development!
 - ALLOWED_HOSTS='Django list of allowed hosts' # eg 'localhost,127.0.0.1,your-domain.com,0.0.0.0'
 - CSRF_TRUSTED_ORIGINS='List of trusted origins' # eg  'https://*.your-domain.com,http://localhost:8080,http://127.0.0.1:8080'
-- AWS_STORAGE_BUCKET_NAME='your s3 bucket'
+- AWS_STORAGE_BUCKET_NAME='your s3 bucket for serving static/media files'
 - AWS_S3_CUSTOM_DOMAIN='your custom domain CNAME for serving static/media files'
 
 
