@@ -7,6 +7,7 @@ Welcome to my personal website repository! This project contains the source code
 - [Introduction](#introduction)
 - [Features](#features)
 - [Installation](#installation)
+- [AWS](#aws)
 - [Usage](#usage)
 - [Contributing](#contributing)
 - [Environment](#environment)
@@ -28,7 +29,23 @@ This website serves as my personal portfolio and blog. It showcases my projects,
 - Search box for specific keywords (Coming soon)
 - Contact form for feedback (Coming soon)
 - Newsletter subscription form (Coming soon)
-- Third-party sign-up (Coming soon)
+- Third-party sign-up/sign-in (Coming soon)
+
+## AWS
+
+The website lives [`here`](https://www.iplayishow.com) in AWS. It's been maintained on the [`aws`](https://github.com/evanchime/me_website/tree/aws) branch
+
+### The Architecture Diagram
+
+![AWS Architecture](screenshots/AWS_architecture.drawio.png)
+
+####  Data Flow:
+1. User initiates request -> CloudFront
+2. CloudFront routes:
+    - /static/*          -> S3 Bucket
+    - /* (dynamic)       -> EC2/Nginx -> Django
+    - 5xx errors         -> S3 Error Bucket
+3. EC2 application connects to RDS PostgreSQL
 
 ## Installation
 
@@ -95,6 +112,11 @@ To run this project locally, follow these steps:
 1. After [Installation](#installation), create a `.env` file in the project root (use the template in [ENVIRONMENT](ENVIRONMENT.md)).
 2. Update `.env` with your settings (e.g., `SECRET_KEY`, `DEBUG=False`).
 3. Don't forget to uncomment image/build section respectively in the compose file
+
+#### Docker Image
+```bash
+evanchime/me_website
+```
 
 #### Docker Compose
 1. Starting:
