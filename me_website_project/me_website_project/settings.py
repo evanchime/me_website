@@ -34,12 +34,12 @@ SECRET_KEY = env.str('ME_WEBSITE_DJANGO_SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
 
 # Fetch ALLOWED_HOSTS environment variable value and parse as a list.
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
-
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Application definition
 
 INSTALLED_APPS = [
+    'storages',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'education',
     'contact',
     'features',
+    'core',
     'widget_tweaks',
 ]
 
@@ -91,17 +92,22 @@ STATICFILES_DIRS = [
 
 WSGI_APPLICATION = 'me_website_project.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    'default': env.db(
-        'DATABASE_URL',
-        default=f'sqlite:///{os.path.join(BASE_DIR, "db.sqlite3")}'
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env.str('POSTGRES_DB'),
+        'USER': env.str('POSTGRES_USER'),
+        'PASSWORD': env.str('POSTGRES_PASSWORD'),
+        'HOST': env.str('POSTGRES_HOST'), 
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
+    }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -121,6 +127,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Storages to be used by django
+
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            "location": "static/",
+        },
+    }
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
@@ -133,13 +149,26 @@ USE_I18N = True
 
 USE_TZ = True
 
+# AWS configuration
+
+AWS_STORAGE_BUCKET_NAME = 'me-website-bucket'
+AWS_S3_REGION_NAME = 'eu-west-2'
+AWS_S3_CUSTOM_DOMAIN = 'static.iplayishow.com'
+AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=31536000'}
+AWS_DEFAULT_ACL = None
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = '/static/'
+if env.str('AWS_S3_CUSTOM_DOMAIN'):
+    STATIC_URL = f'https://{env.str('AWS_S3_CUSTOM_DOMAIN')}/static/'
+elif env.str('AWS_STORAGE_BUCKET_NAME'):
+    STATIC_URL = f'https://{env.str('AWS_STORAGE_BUCKET_NAME')}.s3.amazonaws.com/static/'
+else:
+    STATIC_URL = '/static/'
 
 # In production, collectstatic copies files here:
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type
@@ -158,17 +187,14 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
 # You might need an Google app password for security
-EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD') 
+EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD')
 
 # Optional but recommended
 APP_VERSION = env.str("APP_VERSION", "1.0.0")
 
 # Read CSRF_TRUSTED_ORIGINS from the environment; if not set, fall back 
 # to a default list.
-CSRF_TRUSTED_ORIGINS = env.list(
-    "CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:8080", "http://127.0.0.1:8080"]
-)
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Tell Django to trust the X-Forwarded-Proto header
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -187,3 +213,5 @@ else:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
+    CSRF_COOKIE_HTTPONLY = True   
+

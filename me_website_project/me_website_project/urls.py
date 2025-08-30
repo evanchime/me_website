@@ -17,10 +17,16 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
-from .views import health_check
+from django.shortcuts import render
+
+# Error handlers
+handler400 = 'core.views.bad_request'
+handler403 = 'core.views.permission_denied'
+handler404 = 'core.views.page_not_found'
+#handler500 = 'core.views.server_error'
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin-ndima/', admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("accounts/", include("django.contrib.auth.urls")),
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
@@ -31,5 +37,5 @@ urlpatterns = [
     path("education/", include("education.urls")),
     path("contact/", include("contact.urls")),
     path("features/", include("features.urls")),
-    path("ht/", health_check, name="health_check"),
 ]
+

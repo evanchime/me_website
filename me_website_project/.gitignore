@@ -10,5 +10,5 @@ __pycache__/
 # SQLite database         
 *.sqlite3            
 
-# Staticfiles
+# Static files generated from running collectstatics
 staticfiles/
