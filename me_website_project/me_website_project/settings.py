@@ -95,19 +95,27 @@ WSGI_APPLICATION = 'me_website_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env.str('POSTGRES_DB'),
-        'USER': env.str('POSTGRES_USER'),
-        'PASSWORD': env.str('POSTGRES_PASSWORD'),
-        'HOST': env.str('POSTGRES_HOST'), 
-        'PORT': '5432',
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+if DEBUG:
+    # Use a simple SQLite database for local development.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    # Use PostgreSQL from a DATABASE_URL.
+    DATABASES = {
+        # The env.db() call will raise an error if DATABASE_URL is not 
+        # set in production, which is good practice to prevent 
+        # accidentally running with a wrong config.
+        'default': env.db('DATABASE_URL')
+    }
+
+    # Add optional SSL settings for production if not in DATABASE_URL
+    DATABASES['default']['OPTIONS'] = {
+        'sslmode': 'require',
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
