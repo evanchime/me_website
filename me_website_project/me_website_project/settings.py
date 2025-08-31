@@ -14,15 +14,12 @@ from pathlib import Path
 import os
 import environ
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
- # Load environment variables from environment or .env file if it exists
+# Load environment variables from environment or .env file if it exists
 env = environ.Env()
 env.read_env(os.path.join(BASE_DIR, ".env"))
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -37,7 +34,6 @@ DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Application definition
-
 INSTALLED_APPS = [
     'storages',
     'django.contrib.admin',
@@ -81,45 +77,15 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.media',
             ],
         },
     },
 ]
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
-
 WSGI_APPLICATION = 'me_website_project.wsgi.application'
 
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
-if DEBUG:
-    # Use a simple SQLite database for local development.
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-else:
-    # Use PostgreSQL from a DATABASE_URL.
-    DATABASES = {
-        # The env.db() call will raise an error if DATABASE_URL is not 
-        # set in production, which is good practice to prevent 
-        # accidentally running with a wrong config.
-        'default': env.db('DATABASE_URL')
-    }
-
-    # Add optional SSL settings for production if not in DATABASE_URL
-    DATABASES['default']['OPTIONS'] = {
-        'sslmode': 'require',
-    }
-
 # Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -135,20 +101,90 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Storages to be used by django
+# This setting is needed by BOTH `runserver` in development AND 
+# `collectstatic` in production. It tells Django where to find your 
+# project-level static files (CSS, JS, etc.).
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-        "OPTIONS": {
-            "location": "static/",
+# The directory where `collectstatic` will place files.
+# Django requires this to be set, even when uploading directly to S3.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Absolute path to the folder where user-uploaded files will be stored 
+# locally.
+MEDIA_ROOT = BASE_DIR / 'media'
+
+if DEBUG:
+    # --- DEVELOPMENT-SPECIFIC SETTINGS ---
+
+    # Use a simple SQLite database for local development.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / "db.sqlite3",
+        }
+    }
+
+    # URL prefix for static files served by the development server.
+    STATIC_URL = '/static/'
+
+    # URL prefix for user-uploaded media files served by the development 
+    # server.
+    MEDIA_URL = '/media/'
+
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    CSRF_COOKIE_HTTPONLY = False
+
+else:
+    # --- PRODUCTION-SPECIFIC SETTINGS ---
+
+    # Use PostgreSQL from a DATABASE_URL.
+    DATABASES = {
+        # The env.db() call will raise an error if DATABASE_URL is not 
+        # set in production, which is good practice to prevent 
+        # accidentally running with a wrong config.
+        'default': env.db('DATABASE_URL')
+    }
+
+    # Add optional SSL settings for production if not in DATABASE_URL
+    DATABASES['default']['OPTIONS'] = {
+        'sslmode': 'require',
+    }
+
+    # Configure S3 variables (read by django-storages)
+    AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME')
+    AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN')
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=31536000'}
+    AWS_DEFAULT_ACL = None
+
+    # Override URLs to point to the CDN/S3 in production
+    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+
+    # Configure the actual storage backends for production
+    S3_BACKEND = "storages.backends.s3boto3.S3Boto3Storage"
+    STORAGES = {
+        "default": {
+            "BACKEND": S3_BACKEND,
+            "OPTIONS": {"location": "media"},
+        },
+        "staticfiles": {
+            "BACKEND": S3_BACKEND,
+            "OPTIONS": {"location": "static"},
         },
     }
-}
+
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    CSRF_COOKIE_HTTPONLY = True 
 
 # Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -157,31 +193,7 @@ USE_I18N = True
 
 USE_TZ = True
 
-# AWS configuration
-
-AWS_STORAGE_BUCKET_NAME = 'me-website-bucket'
-AWS_S3_REGION_NAME = 'eu-west-2'
-AWS_S3_CUSTOM_DOMAIN = 'static.iplayishow.com'
-AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=31536000'}
-AWS_DEFAULT_ACL = None
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
-
-if env.str('AWS_S3_CUSTOM_DOMAIN'):
-    STATIC_URL = f'https://{env.str('AWS_S3_CUSTOM_DOMAIN')}/static/'
-elif env.str('AWS_STORAGE_BUCKET_NAME'):
-    STATIC_URL = f'https://{env.str('AWS_STORAGE_BUCKET_NAME')}.s3.amazonaws.com/static/'
-else:
-    STATIC_URL = '/static/'
-
-# In production, collectstatic copies files here:
-
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_REDIRECT_URL = "home" # Redirect to home page after login
@@ -202,10 +214,7 @@ APP_VERSION = env.str("APP_VERSION", "1.0.0")
 
 # Read CSRF_TRUSTED_ORIGINS from the environment; if not set, fall back 
 # to a default list.
-CSRF_TRUSTED_ORIGINS = env.list(
-    "CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:8080", "http://127.0.0.1:8080"]
-)
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Tell Django to trust the X-Forwarded-Proto header
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -215,14 +224,4 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
 
-# Disable these for development only
-if DEBUG:
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
-    SECURE_SSL_REDIRECT = False
-else:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = True
-    CSRF_COOKIE_HTTPONLY = True   
 
