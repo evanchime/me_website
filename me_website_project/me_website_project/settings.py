@@ -214,7 +214,10 @@ APP_VERSION = env.str("APP_VERSION", "1.0.0")
 
 # Read CSRF_TRUSTED_ORIGINS from the environment; if not set, fall back 
 # to a default list.
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:8080", "http://127.0.0.1:8080"]
+)
 
 # Tell Django to trust the X-Forwarded-Proto header
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
