@@ -227,4 +227,36 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
 
+# Make sure you have ADMINS configured for mail_admins to work
+ADMIN_NAME = env.str('ADMIN_NAME', default='Default Admin')
+ADMIN_EMAIL = env.str('ADMIN_EMAIL', default='default@example.com')
+
+# Configure ADMINS only if an email is provided
+ADMINS = []
+if ADMIN_EMAIL and ADMIN_EMAIL != 'default@example.com':
+    ADMINS = [(ADMIN_NAME, ADMIN_EMAIL)]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'mail_admins': {
+            'level': 'ERROR',
+            'class': 'django.utils.log.AdminEmailHandler',
+        }
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['mail_admins', 'console'], # Use one or both
+            'level': 'ERROR', # Only log ERROR level messages and higher
+            'propagate': True,
+        },
+    },
+}
+
+
+
 
