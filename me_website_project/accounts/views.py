@@ -40,36 +40,15 @@ def login(request):
                 auth_login(request, user)
                 request.session.set_expiry(1209600 if remember_me else 0)
                 request.session.modified = True
-                # Redirect to blog page the user was trying to access
-                if request.session.pop('blog_index', None):
-                    return redirect('blog_index')
-                # Redirect to blog page the user was trying to access
-                elif request.session.get('blog_detail_id', None):
-                    pk = request.session.pop('blog_detail_id', None)
-                    return redirect('blog_detail', args=(pk,))
-                # Redirect to polls page the user was trying to access
-                elif request.session.pop('polls_index', None):
-                    return redirect('polls_index')
-                # Redirect to polls page the user was trying to access
-                elif request.session.get('polls_detail_question_id', None):
-                    question_id = request.session.pop(
-                        'polls_detail_question_id', None
-                    ) 
-                    return redirect('polls_detail', args=(question_id,))
-                # Redirect to polls page the user was trying to access
-                elif request.session.get('polls_results_question_id', None):
-                    question_id = request.session.pop(
-                        'polls_results_question_id', None
-                    )
-                    return redirect('polls_results', args=(question_id,))
-                # Redirect to polls page the user was trying to access
-                elif request.session.get('polls_vote_question_id', None):
-                    question_id = request.session.pop(
-                        'polls_vote_question_id', None
-                    )
-                    return redirect('polls_results', args=(question_id,))
-                else: # Redirect to home page
-                    return redirect('home')
+
+                # Get and remove the destination from the session. If it 
+                # doesn't exist, default to the home page URL.
+                destination = request.session.pop(
+                    'intended_destination', reverse('home')
+                )
+                
+                # Redirect to whatever destination was retrieved.
+                return redirect(destination)
             else:
                 form.add_error(None, 'Invalid username and/or password.')
         
