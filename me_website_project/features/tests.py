@@ -500,17 +500,37 @@ class FeaturesIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'This is a test post for integration testing.')
     
-    def test_session_preservation_on_redirect(self):
-        """Test that session variables are preserved during authentication redirects."""
-        # Try to access blog index without authentication
-        response = self.client.get(reverse('blog_index'))
-        self.assertEqual(response.status_code, 302)
+    def test_redirect_workflow_after_login(self):  
+        """  
+        Test that a user trying to access a protected page is redirected 
+        to login, and after logging in, is redirected back to their 
+        original destination.  
+        """  
+        # Try to access blog index, a protected page without logging in.  
+        # This should set a session flag and redirect to the login page.  
+        response_for_redirect = self.client.get(reverse('blog_index'))  
         
-        # Check that session variable is set
-        session = self.client.session
-        self.assertEqual(session.get('blog_index'), 'yes')
-        
-        # Login and verify redirect works
-        self.client.login(username='testuser', password='testpass123')
-        # Session should be cleared after successful login
-        # This would need to be tested through the actual login view
+        # Verify the redirect to the login page.  
+        self.assertRedirects(
+            response_for_redirect, 
+            f"{reverse('login')}?next={reverse('blog_index')}"
+        ) 
+    
+        # Verify the session flag was set
+        self.assertEqual(
+            self.client.session.get('intended_destination'), 
+            reverse('blog_index')
+        )
+
+        # The user is now at the login page. Simulate them submitting
+        # the form. We use the same client, which still has the session
+        # from previous steps.
+        response_after_login = self.client.post(reverse('login'), {
+            'username': 'testuser',
+            'password': 'testpass123'
+        })
+
+        # Verify the final redirect. The login view should have read the
+        # 'next' parameter or session flag and redirected the user back
+        # to the blog index, NOT the default homepage.
+        self.assertRedirects(response_after_login, reverse('blog_index'))

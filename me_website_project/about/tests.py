@@ -26,16 +26,23 @@ class AboutViewTests(TestCase):
     def test_about_view_content_type(self):
         """Test that about view returns HTML content."""
         response = self.client.get(self.about_url)
-        self.assertEqual(response['Content-Type'], 'text/html; charset=utf-8')
+        self.assertEqual(
+            response['Content-Type'], 'text/html; charset=utf-8'
+        )
     
-    def test_about_view_never_cache_decorator(self):
-        """Test that about view has never_cache decorator applied."""
+    def test_about_view_disables_caching(self):
+        """
+        Test that the @never_cache decorator correctly sets non-caching 
+        headers on the response for the about view.
+        """
         response = self.client.get(self.about_url)
-        # Check for cache control headers
         self.assertIn('Cache-Control', response)
-        self.assertIn('no-cache', response['Cache-Control'])
-        self.assertIn('no-store', response['Cache-Control'])
-        self.assertIn('must-revalidate', response['Cache-Control'])
+        cache_control_header = response['Cache-Control']
+        self.assertIn('no-cache', cache_control_header)
+        self.assertIn('no-store', cache_control_header)
+        self.assertIn('must-revalidate', cache_control_header)
+        self.assertIn('max-age=0', cache_control_header)
+
     
     def test_about_view_get_method(self):
         """Test that about view handles GET requests properly."""
@@ -44,7 +51,9 @@ class AboutViewTests(TestCase):
         self.assertIsInstance(response, HttpResponse)
     
     def test_about_view_post_method_allowed(self):
-        """Test that about view handles POST requests (should still work)."""
+        """
+        Test that about view handles POST requests (should still work).
+        """
         response = self.client.post(self.about_url)
         self.assertEqual(response.status_code, 200)
     
@@ -58,21 +67,26 @@ class AboutViewTests(TestCase):
         response = self.client.options(self.about_url)
         self.assertEqual(response.status_code, 200)
     
-    def test_about_url_name(self):
-        """Test that the about URL name resolves correctly."""
-        url = reverse('about')
-        self.assertEqual(url, '/about/')
-    
     def test_about_view_context_variables(self):
-        """Test that about view doesn't pass unexpected context variables."""
+        """
+        Test that about view doesn't pass unexpected context variables.
+        """
         response = self.client.get(self.about_url)
         # Basic context should only contain built-in Django variables
-        expected_keys = ['view', 'request', 'user', 'perms', 'messages', 'DEFAULT_MESSAGE_LEVELS']
+        expected_keys = [
+            'view', 
+            'request', 
+            'user', 
+            'perms', 
+            'messages', 
+            'DEFAULT_MESSAGE_LEVELS'
+        ]
         context_keys = list(response.context.keys()) if response.context else []
         # Check that no unexpected custom variables are passed
         custom_keys = [key for key in context_keys if key not in expected_keys]
         # Allow for some flexibility in context keys
-        self.assertLessEqual(len(custom_keys), 5)  # Allow up to 5 additional context variables
+        # Allow up to 5 additional context variables
+        self.assertLessEqual(len(custom_keys), 5)  
     
     @patch('about.views.render')
     def test_about_view_render_called_correctly(self, mock_render):
@@ -98,29 +112,19 @@ class AboutViewTests(TestCase):
             self.assertEqual(response.status_code, 200)
     
     def test_about_view_with_query_parameters(self):
-        """Test that about view handles query parameters gracefully."""
+        """
+        Test that about view handles query parameters gracefully.
+        """
         response = self.client.get(self.about_url + '?test=1&param=value')
         self.assertEqual(response.status_code, 200)
     
     def test_about_view_with_invalid_query_parameters(self):
         """Test that about view handles invalid query parameters."""
-        response = self.client.get(self.about_url + '?<script>alert("xss")</script>')
+        response = self.client.get(
+            self.about_url + '?<script>alert("xss")</script>'
+        )
         self.assertEqual(response.status_code, 200)
     
-    def test_about_view_response_headers(self):
-        """Test response headers for security and caching."""
-        response = self.client.get(self.about_url)
-        
-        # Test cache control headers
-        self.assertIn('Cache-Control', response)
-        cache_control = response['Cache-Control']
-        self.assertIn('no-cache', cache_control)
-        self.assertIn('no-store', cache_control)
-        self.assertIn('must-revalidate', cache_control)
-        
-        # Test that max-age is 0
-        self.assertIn('max-age=0', cache_control)
-
 
 class AboutURLTests(TestCase):
     """Test cases for about app URL configuration."""
@@ -133,10 +137,15 @@ class AboutURLTests(TestCase):
         self.assertEqual(resolver.url_name, 'about')
         self.assertEqual(resolver.namespace, '')
     
-    def test_about_url_reverse(self):
-        """Test that about URL name reverses correctly."""
-        url = reverse('about')
-        self.assertEqual(url, '/about/')
+    def test_about_url_reverses_correctly(self):
+        """
+        Test that the named URL 'about' correctly reverses to the 
+        expected path '/about/'.
+        """
+        url_name = 'about'
+        expected_path = '/about/'
+        resolved_path = reverse(url_name)
+        self.assertEqual(resolved_path, expected_path)
     
     def test_about_url_without_trailing_slash(self):
         """Test that /about without trailing slash redirects."""
@@ -149,15 +158,17 @@ class AboutURLTests(TestCase):
 class AboutIntegrationTests(TestCase):
     """Integration tests for about app."""
     
-    def test_about_page_accessibility(self):
-        """Test basic accessibility of about page."""
+    def test_about_page_renders_basic_html_structure(self):
+        """
+        Test that the about page renders the fundamental tags of an HTML
+        document, including a title.
+        """
         response = self.client.get(reverse('about'))
-        content = response.content.decode('utf-8')
-        
-        # Check for basic HTML structure
-        self.assertIn('<html', content.lower())
-        self.assertIn('<head', content.lower())
-        self.assertIn('<body', content.lower())
+        self.assertEqual(response.status_code, 200) 
+        self.assertContains(response, "<html", status_code=200)
+        self.assertContains(response, "<head")
+        self.assertContains(response, "<title>About")
+        self.assertContains(response, "</body>")
     
     def test_about_page_loads_within_time_limit(self):
         """Test that about page loads within reasonable time."""

@@ -8,7 +8,12 @@ security, and user experience across different scenarios.
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from accounts.forms import LoginForm, SignUpForm, MyPasswordChangeForm, MyPasswordResetForm
+from accounts.forms import (
+    LoginForm, 
+    SignUpForm, 
+    MyPasswordChangeForm, 
+    MyPasswordResetForm
+)
 from unittest.mock import patch
 import re
 
@@ -24,64 +29,132 @@ class FormValidationTests(TestCase):
             password='SecurePass123!'
         )
     
-    def test_login_form_validation_edge_cases(self):
-        """Test login form with various edge cases."""
-        edge_cases = [
-            # Username edge cases
-            {'username': 'a' * 151, 'password': 'SecurePass123!'},  # Too long
-            {'username': '   ', 'password': 'SecurePass123!'},       # Whitespace only
-            {'username': 'test\nuser', 'password': 'SecurePass123!'}, # Newline
-            {'username': 'test\tuser', 'password': 'SecurePass123!'}, # Tab
-            
-            # Password edge cases  
-            {'username': 'testuser', 'password': ''},                # Empty password
-            {'username': 'testuser', 'password': ' ' * 10},         # Whitespace password
-        ]
-        
-        for case in edge_cases:
-            with self.subTest(case=case):
-                form = LoginForm(data=case)
-                if case['username'] == '   ' or case['password'] == '':
-                    self.assertFalse(form.is_valid())
-                else:
-                    # Form validation might pass, but authentication should fail
-                    self.assertTrue(form.is_valid() or not form.is_valid())
+    def test_login_form_validation_edge_cases(self):  
+        """  
+        Test login form with various edge cases, accounting for the 
+        custom max_length on the username field.  
+        """  
+        # Test cases as tuples: (form_data, expected_is_valid_result)  
+        test_cases = [  
+            # --- Username edge cases ---
+
+            # Username too long (65 chars). Should now be INVALID.
+            ({'username': 'a' * 65, 'password': 'SecurePass123!'}, False),
+
+            # Username exactly at max_length (64 chars). Should be VALID.
+            ({'username': 'a' * 64, 'password': 'SecurePass123!'}, True),
+
+            # Username of only whitespace. Should be INVALID 
+            # (required field).
+            ({'username': '   ', 'password': 'SecurePass123!'}, False),
+
+            # Username with newline. Should be VALID for a CharField.
+            ({'username': 'test\nuser', 'password': 'SecurePass123!'}, True),
+
+            # Username with tab. Should be VALID for a CharField.
+            ({'username': 'test\tuser', 'password': 'SecurePass123!'}, True),
+
+            # --- Password edge cases ---
+
+            # Empty password. Should be INVALID (required field).
+            ({'username': 'testuser', 'password': ''}, False),
+
+            # Whitespace-only password. Should be VALID for the form 
+            # field itself. Authentication would fail later in the view.
+            ({'username': 'testuser', 'password': ' ' * 10}, True),  
+        ]  
     
-    def test_signup_form_comprehensive_validation(self):
-        """Test signup form with comprehensive validation scenarios."""
-        # Test valid signup
-        valid_data = {
-            'username': 'newuser123',
-            'email': 'newuser@example.com',
-            'password1': 'NewSecurePass123!',
-            'password2': 'NewSecurePass123!'
-        }
-        form = SignUpForm(data=valid_data)
-        self.assertTrue(form.is_valid())
-        
-        # Test username validation
-        username_cases = [
-            ('', False),                    # Empty
-            ('a', True),                    # Single character
-            ('a' * 150, True),             # Max length
-            ('a' * 151, False),            # Too long
-            ('user@name', True),            # Special characters
-            ('user name', True),            # Space
-            ('用户名', True),                # Unicode
-        ]
-        
-        for username, should_be_valid in username_cases:
-            with self.subTest(username=username):
-                data = valid_data.copy()
-                data['username'] = username
-                form = SignUpForm(data=data)
-                
-                if should_be_valid and username != '':
-                    # Additional check for existing users
-                    if not User.objects.filter(username=username).exists():
-                        self.assertTrue(form.is_valid(), f"Username '{username}' should be valid")
-                else:
-                    self.assertFalse(form.is_valid(), f"Username '{username}' should be invalid")
+        for i, (form_data, expected_result) in enumerate(test_cases):  
+            with self.subTest(
+                case_index=i, 
+                expected=expected_result, 
+                username_len=len(form_data['username'])
+            ):  
+                form = LoginForm(data=form_data)  
+    
+                if expected_result:  
+                    self.assertTrue(
+                        form.is_valid(),
+                        msg=f"Form should be VALID for case: {form_data}"
+                    )  
+                else:  
+                    self.assertFalse(form.is_valid(),
+                        msg=f"Form should be INVALID for case: {form_data}"
+                    )  
+                    # Check that the 'username' field has the error.
+                    if 'username' in form_data:
+                        # Verify if the username exceeds maximum length
+                        if len(form_data['username']) > 64:
+                            self.assertIn('username', form.errors)
+
+
+    def test_signup_form_rejects_existing_username(self):  
+        """Test that the signup form is invalid if the username already 
+        exists.
+        """
+        # Create a user first to ensure it exists in the database.
+        User.objects.create_user(username='existinguser', password='password123')
+
+        # Try to sign up with the same username.
+        data = {
+            'username': 'existinguser', # This username now exists  
+            'email': 'test@example.com',  
+            'password1': 'ValidPass123!',  
+            'password2': 'ValidPass123!',  
+        }  
+        form = SignUpForm(data=data)  
+    
+        # The form should be invalid.  
+        self.assertFalse(form.is_valid())  
+        # And the error should be on the 'username' field.  
+        self.assertIn('username', form.errors)  
+        self.assertIn('Username already exists', form.errors['username']) 
+
+    def test_signup_form_valid_data(self):  
+        """Test that the signup form is valid with correct data."""  
+        valid_data = {  
+            'username': 'newuser123',  
+            'email': 'newuser@example.com',  
+            'password1': 'NewSecurePass123!',  
+            'password2': 'NewSecurePass123!'  
+        }  
+        form = SignUpForm(data=valid_data)  
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+
+    def test_signup_form_username_validation(self):  
+        """
+        Test the validation rules for the username field 
+        (length, characters).
+        """  
+        # (input_username, expected_is_valid)  
+        username_cases = [  
+            # Boundary and Length  
+            ('', False),                    # Empty is invalid  
+            ('a', True),                     # Single character is valid  
+            ('a' * 150, True),              # Max length is valid  
+            ('a' * 151, False),             # Too long is invalid  
+            
+            # Character Set  
+            ('user.name', True),            # Dot is valid  
+            ('user_name', True),            # Underscore is valid  
+            ('user@name', True),            # @ symbol is valid  
+            ('user-name', True),            # Hyphen is valid  
+            ('user+name', True),            # Plus is valid  
+            ('user name', False),           # Space is INVALID  
+            ('user!', False),              # Exclamation mark is INVALID  
+            ('用户名', True),                 # Unicode letters are valid  
+        ]  
+    
+        for username, expected_validity in username_cases:  
+            with self.subTest(username=username, expected=expected_validity):  
+                data = {  
+                    'username': username,  
+                    'email': 'test@example.com',  
+                    'password1': 'ValidPass123!',  
+                    'password2': 'ValidPass123!',  
+                }  
+                form = SignUpForm(data=data)  
+                self.assertEqual(form.is_valid(), expected_validity)
     
     def test_email_validation_comprehensive(self):
         """Test comprehensive email validation."""
@@ -114,14 +187,18 @@ class FormValidationTests(TestCase):
             with self.subTest(email=email):
                 data = valid_data.copy()
                 data['email'] = email
-                data['username'] = f'user{hash(email)}'  # Unique username
+                data['username'] = f'user{hash(email)}' # Unique username
                 
                 form = SignUpForm(data=data)
                 
                 if should_be_valid:
-                    self.assertTrue(form.is_valid(), f"Email '{email}' should be valid")
+                    self.assertTrue(
+                        form.is_valid(), f"Email '{email}' should be valid")
                 else:
-                    self.assertFalse(form.is_valid(), f"Email '{email}' should be invalid")
+                    self.assertFalse(
+                        form.is_valid(), 
+                        f"Email '{email}' should be invalid"
+                    )
     
     def test_password_strength_validation(self):
         """Test password strength validation."""
@@ -144,7 +221,10 @@ class FormValidationTests(TestCase):
             ('PASSWORD', False),            # Only uppercase
             ('password123', False),         # No special chars
             ('Pass1!', False),              # Too short
-            ('verylongpasswordwithoutspecialchars123', False), # No special
+            (
+                'verylongpasswordwithoutspecialchars123', 
+                False
+            ), # No special
         ]
         
         for password, should_be_valid in password_cases:
@@ -158,9 +238,15 @@ class FormValidationTests(TestCase):
                 form = SignUpForm(data=data)
                 
                 if should_be_valid:
-                    self.assertTrue(form.is_valid(), f"Password '{password}' should be valid")
+                    self.assertTrue(
+                        form.is_valid(), 
+                        f"Password '{password}' should be valid"
+                    )
                 else:
-                    self.assertFalse(form.is_valid(), f"Password '{password}' should be invalid")
+                    self.assertFalse(
+                        form.is_valid(), 
+                        f"Password '{password}' should be invalid"
+                    )
 
 
 class InputSanitizationTests(TestCase):
@@ -187,7 +273,8 @@ class InputSanitizationTests(TestCase):
                     'password': 'testpass'
                 })
                 
-                # Form might be valid or invalid, but should not execute script
+                # Form might be valid or invalid, but should not execute 
+                # script
                 if login_form.is_valid():
                     # If valid, cleaned data should be safe
                     self.assertNotIn('<script>', str(login_form.cleaned_data))
@@ -260,7 +347,9 @@ class InputSanitizationTests(TestCase):
                     # Should not crash on Unicode input
                     self.assertIsInstance(is_valid, bool)
                 except UnicodeError:
-                    self.fail(f"Form failed to handle Unicode input: {unicode_input}")
+                    self.fail(
+                        f"Form failed to handle Unicode input: {unicode_input}"
+                    )
 
 
 class FormSecurityTests(TestCase):
@@ -354,7 +443,9 @@ class FormUsabilityTests(TestCase):
         self.assertIn('required', username_error.lower())
     
     def test_form_field_widgets_and_attributes(self):
-        """Test that form fields have appropriate widgets and attributes."""
+        """
+        Test that form fields have appropriate widgets and attributes.
+        """
         # Test login form
         login_form = LoginForm()
         
@@ -436,10 +527,14 @@ class FormIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         
         # Verify user was created
-        self.assertTrue(User.objects.filter(username='newintegrationuser').exists())
+        self.assertTrue(User.objects.filter(
+            username='newintegrationuser').exists()
+        )
     
     def test_form_validation_messages_in_templates(self):
-        """Test that form validation messages are displayed in templates."""
+        """
+        Test that form validation messages are displayed in templates.
+        """
         # Submit invalid login data
         response = self.client.post('/accounts/login/', {
             'username': '',
@@ -448,8 +543,10 @@ class FormIntegrationTests(TestCase):
         
         self.assertEqual(response.status_code, 200)
         # Should contain error messages
-        self.assertContains(response, 'error', msg_prefix='Login form should show errors')
-        
+        self.assertContains(
+            response, 'error', msg_prefix='Login form should show errors'
+        )
+
         # Submit invalid signup data
         response = self.client.post('/accounts/signup/', {
             'username': '',
@@ -461,5 +558,7 @@ class FormIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # Should contain error messages
         content = response.content.decode('utf-8')
-        self.assertTrue('error' in content.lower() or 'invalid' in content.lower(),
-                       'Signup form should show validation errors')
+        self.assertTrue(
+            'error' in content.lower() or 'invalid' in content.lower(),
+            'Signup form should show validation errors'
+        )

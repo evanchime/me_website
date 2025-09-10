@@ -1,10 +1,11 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.http import HttpResponse
+from django.template.loader import render_to_string
 from unittest.mock import patch
 
 
-class ProjectsViewTests(TestCase):
+class ProjectsViewTests(TestCase ):
     """Test cases for the projects app views."""
     
     def setUp(self):
@@ -25,16 +26,22 @@ class ProjectsViewTests(TestCase):
     def test_projects_view_content_type(self):
         """Test that projects view returns HTML content."""
         response = self.client.get(self.projects_url)
-        self.assertEqual(response['Content-Type'], 'text/html; charset=utf-8')
+        self.assertEqual(
+            response['Content-Type'], 'text/html; charset=utf-8'
+        )
     
-    def test_projects_view_never_cache_decorator(self):
-        """Test that projects view has never_cache decorator applied."""
+    def test_projects_view_disables_caching(self):
+        """
+        Test that the @never_cache decorator correctly sets non-caching 
+        headers on the response for the projects view.
+        """
         response = self.client.get(self.projects_url)
-        # Check for cache control headers
         self.assertIn('Cache-Control', response)
-        self.assertIn('no-cache', response['Cache-Control'])
-        self.assertIn('no-store', response['Cache-Control'])
-        self.assertIn('must-revalidate', response['Cache-Control'])
+        cache_control_header = response['Cache-Control']
+        self.assertIn('no-cache', cache_control_header)
+        self.assertIn('no-store', cache_control_header)
+        self.assertIn('must-revalidate', cache_control_header)
+        self.assertIn('max-age=0', cache_control_header)
     
     def test_projects_view_get_method(self):
         """Test that projects view handles GET requests properly."""
@@ -43,7 +50,9 @@ class ProjectsViewTests(TestCase):
         self.assertIsInstance(response, HttpResponse)
     
     def test_projects_view_post_method_allowed(self):
-        """Test that projects view handles POST requests."""
+        """
+        Test that projects view handles POST requests (should still work).
+        """
         response = self.client.post(self.projects_url)
         self.assertEqual(response.status_code, 200)
     
@@ -57,32 +66,26 @@ class ProjectsViewTests(TestCase):
         response = self.client.options(self.projects_url)
         self.assertEqual(response.status_code, 200)
     
-    def test_projects_url_name(self):
-        """Test that the projects URL name resolves correctly."""
-        url = reverse('projects')
-        self.assertEqual(url, '/projects/')
-    
-    def test_projects_view_with_query_parameters(self):
-        """Test that projects view handles query parameters gracefully."""
-        response = self.client.get(self.projects_url + '?category=web&type=personal')
-        self.assertEqual(response.status_code, 200)
-    
-    def test_projects_view_with_invalid_query_parameters(self):
-        """Test that projects view handles invalid query parameters."""
-        response = self.client.get(self.projects_url + '?<script>alert("xss")</script>')
-        self.assertEqual(response.status_code, 200)
-    
-    def test_projects_view_response_headers(self):
-        """Test response headers for security and caching."""
+    def test_projects_view_context_variables(self):
+        """
+        Test that projects view doesn't pass unexpected context variables.
+        """
         response = self.client.get(self.projects_url)
-        
-        # Test cache control headers
-        self.assertIn('Cache-Control', response)
-        cache_control = response['Cache-Control']
-        self.assertIn('no-cache', cache_control)
-        self.assertIn('no-store', cache_control)
-        self.assertIn('must-revalidate', cache_control)
-        self.assertIn('max-age=0', cache_control)
+        # Basic context should only contain built-in Django variables
+        expected_keys = [
+            'view', 
+            'request', 
+            'user', 
+            'perms', 
+            'messages', 
+            'DEFAULT_MESSAGE_LEVELS'
+        ]
+        context_keys = list(response.context.keys()) if response.context else []
+        # Check that no unexpected custom variables are passed
+        custom_keys = [key for key in context_keys if key not in expected_keys]
+        # Allow for some flexibility in context keys
+        # Allow up to 5 additional context variables
+        self.assertLessEqual(len(custom_keys), 5)  
     
     @patch('projects.views.render')
     def test_projects_view_render_called_correctly(self, mock_render):
@@ -106,7 +109,21 @@ class ProjectsViewTests(TestCase):
         # All responses should be successful
         for response in responses:
             self.assertEqual(response.status_code, 200)
-
+    
+    def test_projects_view_with_query_parameters(self):
+        """
+        Test that projects view handles query parameters gracefully.
+        """
+        response = self.client.get(self.projects_url + '?test=1&param=value')
+        self.assertEqual(response.status_code, 200)
+    
+    def test_projects_view_with_invalid_query_parameters(self):
+        """Test that projects view handles invalid query parameters."""
+        response = self.client.get(
+            self.projects_url + '?<script>alert("xss")</script>'
+        )
+        self.assertEqual(response.status_code, 200)
+    
 
 class ProjectsURLTests(TestCase):
     """Test cases for projects app URL configuration."""
@@ -119,10 +136,15 @@ class ProjectsURLTests(TestCase):
         self.assertEqual(resolver.url_name, 'projects')
         self.assertEqual(resolver.namespace, '')
     
-    def test_projects_url_reverse(self):
-        """Test that projects URL name reverses correctly."""
-        url = reverse('projects')
-        self.assertEqual(url, '/projects/')
+    def test_projects_url_reverses_correctly(self):
+        """
+        Test that the named URL 'projects' correctly reverses to the 
+        expected path '/projects/'.
+        """
+        url_name = 'projects'
+        expected_path = '/projects/'
+        resolved_path = reverse(url_name)
+        self.assertEqual(resolved_path, expected_path)
     
     def test_projects_url_without_trailing_slash(self):
         """Test that /projects without trailing slash redirects."""
@@ -135,19 +157,17 @@ class ProjectsURLTests(TestCase):
 class ProjectsIntegrationTests(TestCase):
     """Integration tests for projects app."""
     
-    def setUp(self):
-        """Set up test fixtures."""
-        self.projects_url = reverse('projects')
-    
-    def test_projects_page_accessibility(self):
-        """Test basic accessibility of projects page."""
+    def test_projects_page_renders_basic_html_structure(self):
+        """
+        Test that the projects page renders the fundamental tags of an HTML
+        document, including a title.
+        """
         response = self.client.get(reverse('projects'))
-        content = response.content.decode('utf-8')
-        
-        # Check for basic HTML structure
-        self.assertIn('<html', content.lower())
-        self.assertIn('<head', content.lower())
-        self.assertIn('<body', content.lower())
+        self.assertEqual(response.status_code, 200) 
+        self.assertContains(response, "<html", status_code=200)
+        self.assertContains(response, "<head")
+        self.assertContains(response, "<title>Projects")
+        self.assertContains(response, "</body>")
     
     def test_projects_page_loads_within_time_limit(self):
         """Test that projects page loads within reasonable time."""
@@ -179,14 +199,3 @@ class ProjectsIntegrationTests(TestCase):
         for i in range(50):
             response = self.client.get(reverse('projects'))
             self.assertEqual(response.status_code, 200)
-    
-    def test_projects_view_context_variables(self):
-        """Test that projects view doesn't pass unexpected context variables."""
-        response = self.client.get(self.projects_url)
-        # Basic context should only contain built-in Django variables
-        expected_keys = ['view', 'request', 'user', 'perms', 'messages', 'DEFAULT_MESSAGE_LEVELS']
-        context_keys = list(response.context.keys()) if response.context else []
-        # Check that no unexpected custom variables are passed
-        custom_keys = [key for key in context_keys if key not in expected_keys]
-        # Allow for some flexibility in context keys
-        self.assertLessEqual(len(custom_keys), 5)  # Allow up to 5 additional context variables

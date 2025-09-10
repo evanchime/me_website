@@ -6,7 +6,13 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
-from .forms import LoginForm, SignUpForm, MyPasswordChangeForm, MyPasswordResetForm, MyPasswordResetConfirmForm
+from .forms import (
+    LoginForm, 
+    SignUpForm, 
+    MyPasswordChangeForm, 
+    MyPasswordResetForm, 
+    MyPasswordResetConfirmForm
+)
 from unittest.mock import patch, MagicMock
 import re
 
@@ -193,6 +199,13 @@ class LoginViewTests(TestCase):
             email='test@example.com'
         )
         self.login_url = reverse('login')
+        self.home_url = reverse('home')
+        self.blog_url = reverse('blog_index')
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='testuser',
+            password='testpassword123'
+        )
     
     def test_login_get_request(self):
         """Test GET request to login page."""
@@ -229,7 +242,7 @@ class LoginViewTests(TestCase):
             'password': 'TestPass123!',
             'remember_me': True
         })
-        self.assertEqual(self.client.session.get_expiry_age(), 1209600)  # 14 days
+        self.assertEqual(self.client.session.get_expiry_age(), 1209600)
         
         # Logout and test with remember_me = False
         self.client.logout()
@@ -238,21 +251,48 @@ class LoginViewTests(TestCase):
             'password': 'TestPass123!',
             'remember_me': False
         })
-        self.assertEqual(self.client.session.get_expiry_age(), 0)  # Session cookie
+        self.assertEqual(self.client.session.get_expiry_age(), 0)
     
-    def test_blog_redirect_after_login(self):
-        """Test redirect to blog after login when session flag is set."""
+    def test_login_redirects_to_intended_destination(self):
+        """
+        Test that the login view redirects to the path stored in the
+        'intended_destination' session variable.
+        """
+        # Manually set the session variable to simulate a user
+        # who was previously redirected from the blog page.
         session = self.client.session
-        session['blog_index'] = 'yes'
+        session['intended_destination'] = self.blog_url
         session.save()
-        
+
+        # Perform a successful login POST request.
         response = self.client.post(self.login_url, {
             'username': 'testuser',
-            'password': 'TestPass123!',
-            'remember_me': False
+            'password': 'TestPass123!'
         })
-        self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse('blog_index'))
+
+        # The user should be redirected to the blog page.
+        self.assertRedirects(response, self.blog_url)
+
+        # Assert that the session key was cleared after being used.
+        self.assertNotIn('intended_destination', self.client.session)
+
+    def test_login_redirects_to_home_by_default(self):
+        """
+        Test that a normal login redirects to the default home page
+        when no destination is stored in the session.
+        """
+        # Act: Perform a standard, successful login POST request.
+        response = self.client.post(self.login_url, {
+            'username': 'testuser',
+            'password': 'testpassword123'
+        })
+
+        # Assert: The user should be redirected to the default home page.
+        self.assertRedirects(response, self.home_url)
+        
+        # Assert that the session is clean.
+        self.assertNotIn('intended_destination', self.client.session)
+
     
     def test_already_authenticated_redirect(self):
         """Test that already authenticated users are redirected."""
@@ -326,7 +366,9 @@ class PasswordChangeViewTests(TestCase):
         """Test that password change requires authentication."""
         response = self.client.get(self.password_change_url)
         self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, f'/accounts/login/?next={self.password_change_url}')
+        self.assertRedirects(
+            response, f'/accounts/login/?next={self.password_change_url}'
+        )
     
     def test_password_change_get_request(self):
         """Test GET request to password change page."""
@@ -390,14 +432,24 @@ class PasswordResetTests(TestCase):
         self.assertRedirects(response, reverse('password_reset_done'))
         mock_send_mail.assert_called_once()
     
-    def test_password_reset_nonexistent_email(self):
-        """Test password reset with nonexistent email."""
-        response = self.client.post(self.password_reset_url, {
-            'email': 'nonexistent@example.com'
-        })
-        # Should still redirect to prevent email enumeration
-        self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse('password_reset_done'))
+    @patch('accounts.views.send_mail')  
+    def test_password_reset_nonexistent_email_does_not_send_email(
+        self, mock_send_mail
+    ):  
+        """  
+        Test password reset with a nonexistent email.  
+        It should redirect to the 'done' page but NOT send an email.  
+        """  
+        response = self.client.post(self.password_reset_url, {  
+            'email': 'nonexistent@example.com'  
+        })  
+        
+        # Verify the secure redirect to prevent enumeration  
+        self.assertEqual(response.status_code, 302)  
+        self.assertRedirects(response, reverse('password_reset_done'))  
+        
+        # Verify that the email sending side-effect was NOT triggered  
+        mock_send_mail.assert_not_called()
     
     def test_password_reset_confirm_valid_token(self):
         """Test password reset confirm with valid token."""
@@ -481,31 +533,46 @@ class AccountsIntegrationTests(TestCase):
         response = self.client.get(reverse('blog_index'))
         self.assertEqual(response.status_code, 200)
     
-    def test_authentication_required_workflow(self):
-        """Test workflow for accessing protected resources."""
-        # Try to access protected resource without authentication
-        response = self.client.get(reverse('blog_index'))
-        self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse('login'))
-        
-        # Check that session variable is set
-        session = self.client.session
-        self.assertEqual(session.get('blog_index'), 'yes')
-        
-        # Login
-        user = User.objects.create_user(
-            username='protecteduser',
-            password='ProtectedPass123!'
+    # In accounts/tests.py or a new tests/test_integration.py
+
+    def test_full_login_to_continue_workflow(self):
+        """
+        Test the full user journey:
+        1. Try to access a protected page.
+        2. Get redirected to login, with destination saved in session.
+        3. Log in successfully.
+        4. Get redirected to the original protected page.
+        """
+        # Define the protected URL we want to access.
+        protected_url = reverse('blog_index')
+        login_url = reverse('login')
+
+        # Attempt to access the protected resource
+        response = self.client.get(protected_url)
+
+        # Assert we are redirected to the login page.
+        self.assertRedirects(response, login_url)
+
+        # Assert that the session now correctly stores the intended 
+        # destination.
+        self.assertEqual(
+            self.client.session.get('intended_destination'), 
+            protected_url
         )
-        response = self.client.post(reverse('login'), {
-            'username': 'protecteduser',
-            'password': 'ProtectedPass123!',
-            'remember_me': False
+
+        # Log in. We are using the same client, so the session persists.
+        response = self.client.post(login_url, {
+            'username': 'testuser',
+            'password': 'TestPass123!'
         })
-        
-        # Should redirect to originally requested page
-        self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse('blog_index'))
+
+        # Assert we are now redirected to the protected page we 
+        # originally wanted.
+        self.assertRedirects(response, protected_url)
+
+        # Assert the session key has been cleared.
+        self.assertNotIn('intended_destination', self.client.session)
+
     
     def test_logout_workflow(self):
         """Test the logout workflow."""
@@ -591,23 +658,33 @@ class SecurityTests(TestCase):
         }, enforce_csrf_checks=True)
         self.assertEqual(response.status_code, 403)
     
-    def test_sql_injection_protection(self):
-        """Test protection against SQL injection attacks."""
-        malicious_inputs = [
-            "'; DROP TABLE auth_user; --",
-            "' OR '1'='1",
-            "admin'--",
-            "' UNION SELECT * FROM auth_user --"
-        ]
+    def test_login_view_is_protected_against_sql_injection(self):  
+        """  
+        Verify that the login form and Django's ORM correctly neutralize  
+        SQL injection payloads, preventing crashes or unauthorized access.  
+        """  
+        malicious_inputs = [  
+            "'; DROP TABLE auth_user; --",  
+            "' OR '1'='1",  
+            "admin'--",  
+            "' UNION SELECT * FROM auth_user --"  
+        ]  
         
-        for malicious_input in malicious_inputs:
-            form_data = {
-                'username': malicious_input,
-                'password': 'anypassword'
-            }
-            response = self.client.post(reverse('login'), form_data)
-            # Should not crash or return unexpected results
-            self.assertIn(response.status_code, [200, 302])
+        for i, payload in enumerate(malicious_inputs):  
+            with self.subTest(payload_index=i):  
+                response = self.client.post(reverse('login'), {  
+                    'username': payload,  
+                    'password': 'anypassword'  
+                })  
+                
+                # The login MUST fail. Therefore, the view should 
+                # re-render the  login page with a 200 OK status code, 
+                # not redirect.  
+                self.assertEqual(response.status_code, 200)  
+                
+                # We can also check that the user is NOT logged in.  
+                # The '_auth_user_id' key should not be in the session.  
+                self.assertNotIn('_auth_user_id', self.client.session)
     
     def test_xss_protection(self):
         """Test protection against XSS attacks."""
