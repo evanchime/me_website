@@ -18,6 +18,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, OperationalError
+from hmac import compare_digest
 from django.conf import settings
 from .config_checks import get_health_check_secret
 import logging
@@ -81,7 +82,9 @@ def health_check(request):
             f"Health check secret validation - Provided: '{provided_secret}', "
             "Expected: '{EXPECTED_HEALTH_CHECK_SECRET}'"
         )
-        if provided_secret != EXPECTED_HEALTH_CHECK_SECRET:
+        if not compare_digest(
+            provided_secret or "", EXPECTED_HEALTH_CHECK_SECRET or ""
+        ):
             return JsonResponse({"error": "Unauthorized"}, status=401)
 
         # Run health check.
