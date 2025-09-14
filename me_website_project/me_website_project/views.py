@@ -25,13 +25,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Cache the secret at module level for efficiency.
 env = environ.Env()
-EXPECTED_HEALTH_CHECK_SECRET = env.str("HEALTH_CHECK_SECRET", default=None)
-if EXPECTED_HEALTH_CHECK_SECRET is None:
-    raise ImproperlyConfigured(
-        "HEALTH_CHECK_SECRET environment variable not set"
-    )
+
+def get_health_check_secret():
+    """
+    Retrieves the health check secret from environment variables.
+    Raises ImproperlyConfigured if it's not set.
+    """
+    EXPECTED_HEALTH_CHECK_SECRET = env.str("HEALTH_CHECK_SECRET", default=None)
+    if EXPECTED_HEALTH_CHECK_SECRET is None:
+        raise ImproperlyConfigured(
+            "HEALTH_CHECK_SECRET environment variable not set"
+        )
+    return EXPECTED_HEALTH_CHECK_SECRET
+
+# Cache the secret at module level for efficiency.
+EXPECTED_HEALTH_CHECK_SECRET = get_health_check_secret()
 
 
 def check_database():
