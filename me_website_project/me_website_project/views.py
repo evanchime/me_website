@@ -19,29 +19,13 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, OperationalError
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-import environ
+from .config_checks import get_health_check_secret
 import logging
 
 logger = logging.getLogger(__name__)
 
-env = environ.Env()
-
-def get_health_check_secret():
-    """
-    Retrieves the health check secret from environment variables.
-    Raises ImproperlyConfigured if it's not set.
-    """
-    EXPECTED_HEALTH_CHECK_SECRET = env.str("HEALTH_CHECK_SECRET", default=None)
-    if EXPECTED_HEALTH_CHECK_SECRET is None:
-        raise ImproperlyConfigured(
-            "HEALTH_CHECK_SECRET environment variable not set"
-        )
-    return EXPECTED_HEALTH_CHECK_SECRET
-
 # Cache the secret at module level for efficiency.
 EXPECTED_HEALTH_CHECK_SECRET = get_health_check_secret()
-
 
 def check_database():
     """
