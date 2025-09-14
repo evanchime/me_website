@@ -17,7 +17,7 @@ Settings:
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
-from django.db import connection
+from django.db import connection, OperationalError
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 import environ
@@ -48,8 +48,8 @@ def check_database():
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-            return True
-    except Exception as e:
+        return True
+    except OperationalError as e:
         logger.error("Database check failed: %s", e)
         return False
 
