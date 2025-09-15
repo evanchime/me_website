@@ -7,8 +7,11 @@ monitoring the application's health in production environments.
 
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.db import connection
+from django.db import connection, OperationalError
 from unittest.mock import patch, MagicMock
+from django.core.exceptions import ImproperlyConfigured
+from hmac import compare_digest
+from me_website_project.config_checks import get_health_check_secret
 import json
 import os
 
@@ -26,7 +29,7 @@ class HealthCheckEndpointTests(TestCase):
         """Test successful health check with valid secret."""
         response = self.client.get(
             self.health_check_url,
-            HTTP_X_HEALTH_CHECK_SECRET='test-health-check-secret'
+            HTTP_X_HEALTH_CHECK_SECRET='test-secret-key'
         )
         
         self.assertEqual(response.status_code, 200)
@@ -136,6 +139,22 @@ class HealthCheckEndpointTests(TestCase):
             self.assertIn('version', data)
             self.assertEqual(data['version'], '1.0.0')
 
+    @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-secret-key'})
+    def test_health_check_omits_version_if_unavailable(self):
+        """
+        Test that health check omits version if APP_VERSION is not set.
+        """
+        response = self.client.get(
+            self.health_check_url,
+            HTTP_X_HEALTH_CHECK_SECRET='test-secret-key'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        # The 'version' key should NOT be in the response.
+        self.assertNotIn('version', data)
+
 
 class HealthCheckDatabaseTests(TestCase):
     """Test cases for the database check functionality."""
@@ -149,51 +168,85 @@ class HealthCheckDatabaseTests(TestCase):
     
     @patch('me_website_project.views.connection')
     def test_check_database_function_failure(self, mock_connection):
-        """Test check_database function when database is unavailable."""
+        """
+        Test that check_database function returns False when the database
+        connection fails.
+        """
         from me_website_project.views import check_database
-        
-        # Mock database connection failure
-        mock_cursor = MagicMock()
-        mock_cursor.execute.side_effect = Exception("Database connection failed")
-        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
-        
+
+        # Configure the mock to simulate a database error.
+        # We make the mock's cursor raise an OperationalError when used.
+        mock_connection.cursor.side_effect = OperationalError(
+            "Database is down!"
+        )
+
+        # Call the function.
         result = check_database()
+
+        # The function should catch the exception and return False.
         self.assertFalse(result)
     
     @patch('me_website_project.views.connection')
     def test_check_database_logs_errors(self, mock_connection):
-        """Test that database check errors are logged."""
+        """
+        Test that when a database connection fails, the error is logged
+        before the function returns False.
+        """
         from me_website_project.views import check_database
-        
-        # Mock database connection failure
-        mock_cursor = MagicMock()
-        mock_cursor.execute.side_effect = Exception("Database error")
-        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
-        
+
+        # Simulate the database failure. Make the act of getting a 
+        # cursor raise the specific, correct exception.
+        error_message = "Database connection failed!"
+        mock_connection.cursor.side_effect = OperationalError(error_message)
+
+        # Intercept the logger and call the function. Use a nested patch 
+        # to capture calls to the logger.
         with patch('me_website_project.views.logger') as mock_logger:
             result = check_database()
-            
+
+            # Assert the function returned the correct failure value.
             self.assertFalse(result)
+
+            # Assert that the logger's 'error' method was called exactly 
+            # once.
             mock_logger.error.assert_called_once()
+
+            # Assert that the logger was called with a message 
+            # containing the exception text. This proves you are
+            # logging useful information.
+            call_args, call_kwargs = mock_logger.error.call_args
+            self.assertIn("Database health check failed", call_args[0])
+            self.assertIn(error_message, call_args[0])
 
 
 class HealthCheckSecurityTests(TestCase):
     """Test cases for health check security measures."""
     
-    def test_health_check_secret_required_in_settings(self):
-        """Test that health check secret is required in environment."""
-        # This test ensures the secret is properly configured
+    def test_get_health_check_secret_raises_error_if_missing(self):
+        """
+        Test that get_health_check_secret raises ImproperlyConfigured
+        if the environment variable is not set.
+        """
+        # Ensure the environment variable is not set
         with patch.dict(os.environ, {}, clear=True):
-            # Remove HEALTH_CHECK_SECRET from environment
-            try:
-                # Try to import the views module which should fail
-                import importlib
-                import me_website_project.views
-                importlib.reload(me_website_project.views)
-                self.fail("Should raise ImproperlyConfigured when secret is missing")
-            except Exception:
-                # Expected behavior - should raise an exception
-                pass
+            # Use assertRaises as a context manager to verify that the 
+            # expected exception is raised.
+            with self.assertRaises(ImproperlyConfigured) as cm:
+                get_health_check_secret()
+
+            # Check the exception message
+            self.assertIn("environment variable is not set", str(cm.exception))
+
+    def test_get_health_check_secret_returns_value_if_present(self):
+        """
+        Test that get_health_check_secret returns the correct value
+        when the environment variable is set.
+        """
+        # Set the environment variable
+        secret = 'my-test-secret'
+        with patch.dict(os.environ, {'HEALTH_CHECK_SECRET': secret}):
+            retrieved_secret = get_health_check_secret()
+            self.assertEqual(retrieved_secret, secret)
     
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-secret'})
     def test_health_check_secret_case_sensitive(self):
@@ -206,49 +259,59 @@ class HealthCheckSecurityTests(TestCase):
         self.assertEqual(response.status_code, 403)
     
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-secret'})
-    def test_health_check_secret_exact_match(self):
-        """Test that health check secret requires exact match."""
-        # Test with extra characters
-        response = self.client.get(
-            reverse('health_check'),
-            HTTP_X_HEALTH_CHECK_SECRET='test-secret-extra'
-        )
-        self.assertEqual(response.status_code, 403)
+    def test_health_check_secret_requires_exact_match(self):
+        """
+        Test that health check secret requires an exact, case-sensitive 
+        match.
+        """
         
-        # Test with substring
-        response = self.client.get(
-            reverse('health_check'),
-            HTTP_X_HEALTH_CHECK_SECRET='test'
-        )
-        self.assertEqual(response.status_code, 403)
-    
+        test_cases = {
+            "superset": "test-secret-extra", # More than the secret
+            "subset": "test",               # Less than the secret
+            "case_mismatch": "TEST-SECRET", # Wrong case
+            "empty": "",                    # Empty string
+        }
+
+        for name, payload in test_cases.items():
+            with self.subTest(case=name):
+                response = self.client.get(
+                    reverse('health_check'),
+                    HTTP_X_HEALTH_CHECK_SECRET=payload
+                )
+                self.assertEqual(
+                    response.status_code, 
+                    403,
+                    f"Failed on case '{name}' with payload '{payload}'"
+                )
+
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-secret'})
-    def test_health_check_timing_attack_resistance(self):
-        """Test that health check is resistant to timing attacks."""
-        import time
+    @patch('me_website_project.views.compare_digest')
+    def test_health_check_uses_secure_comparison(self, mock_compare_digest):
+        """
+        Test that the view uses a constant-time comparison function to
+        prevent timing attacks.
+        """
+        # Configure the mock to return True so the request succeeds
+        mock_compare_digest.return_value = True
         
-        # Measure time for correct secret
-        start = time.time()
-        response1 = self.client.get(
+        # Make the request
+        response = self.client.get(
             reverse('health_check'),
-            HTTP_X_HEALTH_CHECK_SECRET='test-secret'
+            HTTP_X_HEALTH_CHECK_SECRET='any-secret'
         )
-        time1 = time.time() - start
         
-        # Measure time for incorrect secret
-        start = time.time()
-        response2 = self.client.get(
-            reverse('health_check'),
-            HTTP_X_HEALTH_CHECK_SECRET='wrong-secret'
-        )
-        time2 = time.time() - start
+        self.assertEqual(response.status_code, 200)
         
-        # Both should succeed/fail quickly
-        self.assertLess(time1, 1.0)
-        self.assertLess(time2, 1.0)
+        # Was compare_digest called?
+        mock_compare_digest.assert_called_once()
         
-        # Time difference should be minimal (less than 100ms)
-        self.assertLess(abs(time1 - time2), 0.1)
+        # Check what it was called with
+        args, kwargs = mock_compare_digest.call_args
+        provided_secret = args[0]
+        expected_secret = args[1]
+        
+        self.assertEqual(provided_secret, 'any-secret')
+        self.assertEqual(expected_secret, 'test-secret')
 
 
 class HealthCheckIntegrationTests(TestCase):

@@ -6,8 +6,14 @@ functionality of the Django project including URL routing, settings,
 middleware, database connections, and cross-app interactions.
 """
 
+from collections import Counter
 from django.test import TestCase, Client, TransactionTestCase
-from django.urls import reverse, resolve
+from django.urls import (
+    NoReverseMatch, 
+    Resolver404, get_resolver, 
+    reverse, 
+    resolve
+)
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.exceptions import ImproperlyConfigured
@@ -46,63 +52,146 @@ class ProjectURLTests(TestCase):
         
         for url, expected_name in main_urls:
             with self.subTest(url=url):
-                resolver = resolve(url)
-                if expected_name:
+                try:
+                    resolver = resolve(url)
                     self.assertEqual(resolver.url_name, expected_name)
+                except Resolver404:
+                    self.fail(f"URL '{url}' did not resolve.")
     
     def test_reverse_all_named_urls(self):
-        """Test that all named URLs can be reversed."""
-        named_urls = [
-            'home', 'about', 'projects', 'skills', 'experience', 
-            'education', 'contact', 'login', 'signup', 'logout',
-            'password_change', 'password_reset', 'blog_index', 
-            'polls_index', 'health_check'
+        """Test that all named URLs can be reversed successfully."""
+        # Each item is a tuple: (url_name, list_of_args, dict_of_kwargs)
+        # We provide dummy arguments for URLs that require them.
+        url_configs = [
+                # Main App URLs
+                ('home', [], {}),
+                ('about', [], {}),
+                ('projects', [], {}),
+                ('skills', [], {}),
+                ('experience', [], {}),
+                ('education', [], {}),
+                ('contact', [], {}),
+                ('health_check', [], {}),
+
+                # Authentication URLs
+                ('login', [], {}),
+                ('signup', [], {}),
+                ('password_change', [], {}),
+                ('password_change_done', [], {}),
+                ('password_reset', [], {}),
+                ('password_reset_done', [], {}),
+                ('password_reset_confirm', 
+                 [], 
+                 {'uidb64': 'test-uid', 'token': 'test-token'}
+                ),
+                ('password_reset_complete', [], {}),
+
+                # Features App: Blog URLs
+                ('blog_index', [], {}),
+                ('blog_detail', [], {'pk': 1}),
+
+                # Features App: Polls URLs
+                ('polls_index', [], {}),
+                ('polls_detail', [], {'question_id': 1}),
+                ('polls_results', [], {'question_id': 1}),
+                ('polls_vote', [], {'question_id': 1}),
         ]
-        
-        for url_name in named_urls:
+
+        for url_name, args, kwargs in url_configs:
             with self.subTest(url_name=url_name):
                 try:
-                    reverse(url_name)
-                except Exception as e:
-                    self.fail(f"Could not reverse URL '{url_name}': {e}")
+                    resolved_url = reverse(url_name, args=args, kwargs=kwargs)
+                    # Check that the resolved URL is a non-empty string
+                    self.assertIsInstance(resolved_url, str)
+                    self.assertTrue(len(resolved_url) > 0)
+                except NoReverseMatch as e:
+                    # If reversal fails, fail the test with a clear 
+                    # error message
+                    self.fail(
+                        f"URL reversal failed for '{url_name}' "
+                        f"with args={args}, kwargs={kwargs}. Error: {e}"
+                    )
     
-    def test_url_patterns_no_conflicts(self):
-        """Test that URL patterns don't conflict with each other."""
-        from django.urls import get_resolver
-        resolver = get_resolver()
-        
-        # Get all URL patterns
-        url_patterns = []
+
+class URLConflictTests(TestCase):
+    def get_all_url_patterns(self, resolver):
+        """Recursively fetch all URL patterns from a resolver."""
+        patterns = set()
         for pattern in resolver.url_patterns:
-            url_patterns.append(str(pattern.pattern))
+            if hasattr(pattern, 'url_patterns'):
+                # It's an include(), so recurse into it.
+                nested_patterns = self.get_all_url_patterns(pattern)
+                for nested_pattern, nested_name in nested_patterns:
+                    full_pattern = str(pattern.pattern) + nested_pattern
+                    patterns.add((full_pattern, nested_name))
+            else:
+                # It's a regular path().
+                patterns.add((str(pattern.pattern), pattern.name))
+        return patterns
+
+    def test_no_duplicate_url_paths(self):
+        """
+        Test that there are no duplicate URL paths defined in the project.
+        """
+        resolver = get_resolver()
+        all_patterns = self.get_all_url_patterns(resolver)
         
-        # Check for obvious conflicts
-        self.assertNotIn('', url_patterns[1:])  # Only root should be empty
+        paths = [pattern[0] for pattern in all_patterns]
+        path_counts = Counter(paths)
+        duplicates = {
+            path: count for path, count in path_counts.items() if count > 1
+        }
         
-        # Check that admin URLs don't conflict with app URLs
-        admin_patterns = [p for p in url_patterns if 'admin' in str(p)]
-        app_patterns = [p for p in url_patterns if 'admin' not in str(p)]
-        
-        self.assertTrue(len(admin_patterns) > 0)
-        self.assertTrue(len(app_patterns) > 0)
+        self.assertEqual(
+            len(duplicates), 
+            0,
+            f"Found duplicate URL paths: {duplicates}"
+        )
 
 
 class ProjectSettingsTests(TestCase):
     """Test cases for Django settings configuration."""
     
-    def test_required_settings_exist(self):
-        """Test that all required settings are properly configured."""
-        required_settings = [
-            'SECRET_KEY', 'DEBUG', 'ALLOWED_HOSTS', 'INSTALLED_APPS',
-            'MIDDLEWARE', 'ROOT_URLCONF', 'TEMPLATES', 'DATABASES'
-        ]
+    def test_required_settings_exist_and_are_configured(self):
+        """
+        Test that all required settings are properly configured with
+        non-empty values where applicable.
+        """
+        # Define settings and their expected types
+        required_settings = {
+            'SECRET_KEY': str,
+            'DEBUG': bool,
+            'ALLOWED_HOSTS': list,
+            'INSTALLED_APPS': list,
+            'MIDDLEWARE': list,
+            'ROOT_URLCONF': str,
+            'TEMPLATES': list,
+            'DATABASES': dict,
+        }
         
-        for setting_name in required_settings:
+        for setting_name, expected_type in required_settings.items():
             with self.subTest(setting=setting_name):
-                self.assertTrue(hasattr(settings, setting_name))
+                # Check for existence
+                self.assertTrue(
+                    hasattr(settings, setting_name),
+                    f"Setting '{setting_name}' is not defined."
+                )
+                
                 setting_value = getattr(settings, setting_name)
-                self.assertIsNotNone(setting_value)
-    
+                
+                # Check for type
+                self.assertIsInstance(
+                    setting_value, expected_type,
+                    f"Setting '{setting_name}' is not of type {expected_type}."
+                )
+                
+                # Check for non-emptiness for collections
+                if expected_type in [list, dict, str]:
+                    self.assertTrue(
+                        len(setting_value) > 0,
+                        f"Setting '{setting_name}' must not be empty."
+                    )
+
     def test_installed_apps_configuration(self):
         """Test that all required apps are installed."""
         required_apps = [
@@ -126,28 +215,85 @@ class ProjectSettingsTests(TestCase):
             with self.subTest(app=app):
                 self.assertIn(app, settings.INSTALLED_APPS)
     
-    def test_middleware_configuration(self):
-        """Test that required middleware is configured."""
-        required_middleware = [
+    def test_middleware_presence_and_order(self):
+        """
+        Test that required middleware is configured in the correct order.
+        """
+        required_middleware_order = [
             'django.middleware.security.SecurityMiddleware',
             'django.contrib.sessions.middleware.SessionMiddleware',
             'django.middleware.common.CommonMiddleware',
             'django.middleware.csrf.CsrfViewMiddleware',
             'django.contrib.auth.middleware.AuthenticationMiddleware',
             'django.contrib.messages.middleware.MessageMiddleware',
-            'django.middleware.clickjacking.XFrameOptionsMiddleware'
+            'django.middleware.clickjacking.XFrameOptionsMiddleware',
         ]
         
-        for middleware in required_middleware:
-            with self.subTest(middleware=middleware):
-                self.assertIn(middleware, settings.MIDDLEWARE)
+        # Get the actual middleware list from settings
+        actual_middleware = settings.MIDDLEWARE
+
+        # Find the index of each required middleware
+        indices = [
+            actual_middleware.index(m) for m in required_middleware_order
+        ]
+        
+        # The list of indices should be sorted. This proves that the 
+        # middleware appears in the settings in the same order as in our 
+        # required list.
+        self.assertEqual(
+            indices,
+            sorted(indices),
+            "Middleware is not in the required order."
+        )
     
-    def test_database_configuration(self):
-        """Test that database is properly configured."""
-        self.assertIn('default', settings.DATABASES)
+    def test_default_database_is_fully_configured(self):
+        """
+        Test that the default database is properly and fully configured.
+        """
+        # Check that a 'default' database is defined
+        self.assertIn(
+            'default', 
+            settings.DATABASES,
+            "A 'default' database configuration is required."
+        )
+
         db_config = settings.DATABASES['default']
-        self.assertIn('ENGINE', db_config)
-        self.assertIn('NAME', db_config)
+        
+        # Define the keys that MUST exist for any database engine
+        required_keys = ['ENGINE', 'NAME']
+        
+        for key in required_keys:
+            with self.subTest(key=key):
+                # Check for the key's existence
+                self.assertIn(
+                    key, 
+                    db_config, 
+                    f"Key '{key}' is missing in default DB config."
+                )
+                
+                # Check that the value is a non-empty string
+                value = db_config.get(key)
+                self.assertIsInstance(
+                    value, 
+                    str, 
+                    f"Value for '{key}' should be a string."
+                )
+                self.assertTrue(
+                    value, 
+                    f"Value for '{key}' must not be an empty string."
+                )
+
+        # Check for other keys if not using SQLite
+        if 'sqlite' not in db_config['ENGINE']:
+            production_keys = ['USER', 'PASSWORD', 'HOST', 'PORT']
+            for key in production_keys:
+                with self.subTest(key=key):
+                    self.assertIn(
+                        key, 
+                        db_config,
+                        f"Key '{key}' is expected for non-SQLite databases."
+                    )
+
     
     def test_template_configuration(self):
         """Test that templates are properly configured."""
