@@ -27,6 +27,9 @@ env.read_env(BASE_DIR / ".env")
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env.str('ME_WEBSITE_DJANGO_SECRET_KEY')
 
+# Custom admin URL for security through obscurity
+SECRET_ADMIN_URL = env.str('SECRET_ADMIN_URL')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DEBUG', default=False)
 

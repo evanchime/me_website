@@ -28,7 +28,7 @@ handler404 = 'core.views.page_not_found'
 #handler500 = 'core.views.server_error'
 
 urlpatterns = [
-    path('admin-ndima/', admin.site.urls),
+    path(settings.SECRET_ADMIN_URL, admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("accounts/", include("django.contrib.auth.urls")),
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
