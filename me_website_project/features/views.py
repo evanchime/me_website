@@ -54,8 +54,11 @@ def polls_index(request):
     if not request.user.is_authenticated:
         request.session['intended_destination'] = reverse('polls_index')
         return HttpResponseRedirect(reverse('login'))
-        
-    latest_question_list = Question.objects.order_by('-pub_date')[:5]
+
+    latest_question_list = (
+        Question.objects.order_by('-pub_date')
+        .prefetch_related('choice_set')[:5]
+    )
     context = {'latest_question_list': latest_question_list}
     return render(request, "features/polls/poll.html", context)
 
@@ -88,9 +91,14 @@ def polls_results(request, question_id):
         )
         return HttpResponseRedirect(reverse('login'))
         
-    question = get_object_or_404(Question, pk=question_id)
+    question = get_object_or_404(
+        Question.objects.prefetch_related('choice_set'), 
+        pk=question_id
+    )
     return render(
-        request, 'features/polls/results.html', {'question': question}
+        request, 
+        'features/polls/results.html', 
+        {'question': question}
     )
 
 
