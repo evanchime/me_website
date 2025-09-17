@@ -21,6 +21,7 @@ from django.db import connection, transaction
 from django.conf import settings
 from django.template.loader import get_template
 from django.template import TemplateDoesNotExist
+from django.contrib.staticfiles import finders
 from features.models import Post, Question, Choice
 from unittest.mock import patch, MagicMock
 import tempfile
@@ -418,11 +419,18 @@ class TemplateTests(TestCase):
             with self.subTest(url=url):
                 response = client.get(url)
                 self.assertEqual(response.status_code, 200)
-                content = response.content.decode('utf-8')
-                # Check for common base template elements
-                self.assertIn('<html', content.lower())
-                self.assertIn('<head', content.lower())
-                self.assertIn('<body', content.lower())
+
+                # Checks for an element that is guaranteed to only be in 
+                # the base template.
+                self.assertContains(
+                    response,
+                    '<input type="name" class="form-control" id="inputName">',
+                    html=True,
+                    msg_prefix=(
+                        f"URL '{url}' does not seem to inherit from the base "
+                        "template"
+                    )
+                )
 
 
 class SecurityTests(TestCase):
@@ -430,26 +438,82 @@ class SecurityTests(TestCase):
     
     def test_csrf_protection_enabled(self):
         """Test that CSRF protection is enabled."""
-        self.assertIn('django.middleware.csrf.CsrfViewMiddleware', settings.MIDDLEWARE)
+        self.assertIn(
+            'django.middleware.csrf.CsrfViewMiddleware', 
+            settings.MIDDLEWARE
+        )
     
     def test_clickjacking_protection_enabled(self):
         """Test that clickjacking protection is enabled."""
-        self.assertIn('django.middleware.clickjacking.XFrameOptionsMiddleware', settings.MIDDLEWARE)
-    
-    def test_security_headers(self):
-        """Test that security headers are properly set."""
-        client = Client()
-        response = client.get(reverse('home'))
+        self.assertIn(
+            'django.middleware.clickjacking.XFrameOptionsMiddleware', 
+            settings.MIDDLEWARE
+        )
+
+    def test_x_frame_options_header_is_present(self):
+        """Test that the X-Frame-Options header is set on responses."""
+        response = self.client.get(reverse('home'))
         
+        self.assertEqual(response.status_code, 200)
+        # Check for the header's presence and its value
+        self.assertEqual(response.headers['X-Frame-Options'], 'DENY')
+    
+    def test_security_headers_are_correctly_configured(self):
+        """
+        Test that recommended security headers are present and 
+        informational headers are absent.
+        """
+        response = self.client.get(reverse('home'))
+        
+        # Check for the PRESENCE of hardening headers
+        self.assertEqual(response.headers.get('X-Frame-Options'), 'DENY')
+        self.assertEqual(
+            response.headers.get('X-Content-Type-Options'), 
+            'nosniff'
+        )
+        self.assertIn('Strict-Transport-Security', response.headers)
+        
+        # Check for the ABSENCE of informational headers
+        self.assertNotIn('Server', response.headers)
+        self.assertNotIn('X-Powered-By', response.headers)
+
         # Test that response doesn't expose sensitive headers
         self.assertNotIn('X-Powered-By', response)
         self.assertNotIn('Server', response)
     
     def test_admin_requires_authentication(self):
-        """Test that admin interface requires authentication."""
+        """
+        Test that the admin interface redirects unauthenticated users 
+        to the login page.
+        """
         client = Client()
+        
+        secret_admin_url = f"/{settings.SECRET_ADMIN_URL}"
+
+        # Attempt to access the secret admin URL
+        response = client.get(secret_admin_url)
+        
+        # Expected login URL, with the admin URL as the 'next' parameter
+        expected_login_url = f"{reverse('login')}?next={secret_admin_url}"
+
+        # assertRedirects checks both the status code (302) and the 
+        # 'Location' header.
+        self.assertRedirects(response, expected_login_url)
+
+    
+    def test_default_admin_url_is_disabled(self):
+        """
+        Test that the default '/admin/' URL returns a 404 Not Found.
+        This confirms our security-by-obscurity measure is active.
+        """
+        client = Client()
+        
+        # Attempt to access the default admin URL
         response = client.get('/admin/')
-        self.assertEqual(response.status_code, 302)  # Redirect to login
+        
+        # The response must be a 404
+        self.assertEqual(response.status_code, 404)
+
     
     def test_password_validation(self):
         """Test that password validation is working."""
@@ -489,7 +553,11 @@ class PerformanceTests(TestCase):
                 
                 self.assertEqual(response.status_code, 200)
                 load_time = end_time - start_time
-                self.assertLess(load_time, 2.0, f"Page {url} took {load_time:.2f}s to load")
+                self.assertLess(
+                    load_time, 
+                    2.0, 
+                    f"Page {url} took {load_time:.2f}s to load"
+                )
     
     def test_database_query_efficiency(self):
         """Test that database queries are efficient."""
@@ -509,58 +577,102 @@ class PerformanceTests(TestCase):
                     votes=j
                 )
         
-        # Test query count for retrieving questions with choices
-        with self.assertNumQueries(2):  # Should be 2 queries max with prefetch_related
-            questions = Question.objects.prefetch_related('choice_set').all()
-            for question in questions:
-                list(question.choice_set.all())  # Force evaluation
+        with self.assertNumQueries(2):
+            # This client.get() call will execute the code in the
+            # question_list_view, including the database query.
+            response = self.client.get(reverse('question_list'))
+
+        self.assertEqual(response.status_code, 200)
     
-    def test_static_files_accessibility(self):
-        """Test that static files are accessible."""
-        from django.contrib.staticfiles import finders
-        
-        # Test that static files finder works
-        static_file = finders.find('docs/assets/css/carousel.css')
-        if static_file:  # Only test if file exists
-            self.assertTrue(os.path.exists(static_file))
+    def test_all_project_static_files_are_findable(self):
+        """
+        Test that every file found in the project's main static directory
+        is correctly findable by Django's staticfiles finders.
+        """
+        # The root directory we want to test.
+        project_static_dir = os.path.join(settings.BASE_DIR, 'static')
+
+        # Check if the directory exists to avoid errors if it doesn't.
+        if not os.path.isdir(project_static_dir):
+            self.fail(
+                f"Project static directory not found: {project_static_dir}"
+            )
+
+        # Walk the directory to get all file paths.
+        for dirpath, _, filenames in os.walk(project_static_dir):
+            for filename in filenames:
+                # Create the RELATIVE path. This is the path that 
+                # Django's finder expects to see.
+                full_path = os.path.join(dirpath, filename)
+                relative_path = os.path.relpath(full_path, project_static_dir)
+                
+                # On Windows, os.path.relpath can produce backslashes.
+                # Django's finders expect forward slashes.
+                relative_path = relative_path.replace('\\', '/')
+
+                # Now, run the test with the correct relative path.
+                with self.subTest(file=relative_path):
+                    # Ask the finder for the RELATIVE path.
+                    found_path = finders.find(relative_path)
+                    
+                    # Assert that the finder found something.
+                    self.assertIsNotNone(
+                        found_path,
+                        f"'{relative_path}' exists on disk but was not found "
+                        f"by finders."
+                    )
+
+                    # Assert that the path it found is the same as the 
+                    # one we started with.
+                    self.assertEqual(
+                        os.path.normpath(found_path),
+                        os.path.normpath(full_path)
+                    )
 
 
 class ConcurrencyTests(TransactionTestCase):
     """Test cases for concurrent access and thread safety."""
     
-    def test_concurrent_user_creation(self):
-        """Test that concurrent user creation doesn't cause conflicts."""
+    def test_concurrent_duplicate_user_creation(self):
+        """
+        Test that the system gracefully handles concurrent attempts to 
+        create a user with the same username.
+        """
         results = []
         errors = []
         
-        def create_user(username):
+        def create_duplicate_user():
             try:
+                # All threads try to create the SAME user
                 user = User.objects.create_user(
-                    username=username,
+                    username='duplicate_user',
                     password='testpass123'
                 )
                 results.append(user.id)
             except Exception as e:
-                errors.append(str(e))
-        
-        # Create multiple threads to create users concurrently
+                # We EXPECT IntegrityError here
+                errors.append(e)
+                
         threads = []
         for i in range(10):
-            thread = threading.Thread(target=create_user, args=[f'user{i}'])
+            thread = threading.Thread(target=create_duplicate_user)
             threads.append(thread)
-        
-        # Start all threads
+            
         for thread in threads:
             thread.start()
-        
-        # Wait for all threads to complete
+            
         for thread in threads:
             thread.join()
-        
-        # All users should be created successfully
-        self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
-        self.assertEqual(len(results), 10)
-        self.assertEqual(len(set(results)), 10)  # All IDs should be unique
+            
+        # Assert that exactly ONE user was created successfully.
+        self.assertEqual(len(results), 1)
+
+        # Assert the other NINE attempts failed with an IntegrityError.
+        # This proves the database's UNIQUE constraint is working.
+        from django.db import IntegrityError
+        self.assertEqual(len(errors), 9)
+        self.assertTrue(all(isinstance(e, IntegrityError) for e in errors))
+
     
     def test_concurrent_voting(self):
         """Test that concurrent voting doesn't cause race conditions."""
