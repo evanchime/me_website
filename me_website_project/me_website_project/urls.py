@@ -18,8 +18,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
-from django.shortcuts import render
 from django.conf.urls.static import static
+from .views import health_check
 
 
 urlpatterns = [
@@ -34,6 +34,7 @@ urlpatterns = [
     path("education/", include("education.urls")),
     path("contact/", include("contact.urls")),
     path("features/", include("features.urls")),
+    path("ht/", health_check, name="health_check"),
 ]
 
 # This is only for development and will only work if DEBUG is True
