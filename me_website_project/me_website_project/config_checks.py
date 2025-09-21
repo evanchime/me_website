@@ -46,6 +46,6 @@ def get_health_check_secret():
     EXPECTED_HEALTH_CHECK_SECRET = env.str("HEALTH_CHECK_SECRET", default=None)
     if EXPECTED_HEALTH_CHECK_SECRET is None:
         raise ImproperlyConfigured(
-            "HEALTH_CHECK_SECRET environment variable not set"
+            "HEALTH_CHECK_SECRET environment variable is not set"
         )
     return EXPECTED_HEALTH_CHECK_SECRET
