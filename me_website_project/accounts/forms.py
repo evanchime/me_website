@@ -57,6 +57,11 @@ class SignUpForm(UserCreationForm):
     - Unique email address
     - Strong password matching complexity rules
     """
+    email = forms.EmailField(
+        required=True,  # Explicitly set required to True
+        error_messages={'required': 'Email address is required.'}
+    )
+    
     class Meta:
         model = User
         fields = ('username', 'email', 'password1', 'password2')
@@ -89,8 +94,14 @@ class SignUpForm(UserCreationForm):
         return username
         
     def clean_email(self):
-        """Ensures email address is not already registered."""
-        email = self.cleaned_data.get('email')
+        """Ensures email address is not empty and not already registered."""
+        email = self.cleaned_data.get('email', '')
+        
+        # Check if email is empty
+        if not email:
+            raise ValidationError("Email address is required.")
+            
+        # Check for uniqueness
         if User.objects.filter(email__iexact=email).exists():
             raise ValidationError("Email address already in use.")
         return email

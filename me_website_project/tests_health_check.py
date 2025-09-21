@@ -37,7 +37,7 @@ class HealthCheckEndpointTests(TestCase):
         
         data = json.loads(response.content)
         self.assertEqual(data['status'], 'healthy')
-        self.assertTrue(data['services']['database'])  # Fixed: services.database not database
+        self.assertTrue(data['services']['database']) 
         self.assertIn('version', data)
     
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-health-check-secret'})
@@ -48,7 +48,8 @@ class HealthCheckEndpointTests(TestCase):
             HTTP_X_HEALTH_CHECK_SECRET='wrong-secret'
         )
         
-        # Accept either 401 or 403 as both are valid for unauthorized access
+        # Accept either 401 or 403 as both are valid for unauthorized 
+        # access
         self.assertIn(response.status_code, [401, 403])
     
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-health-check-secret'})
@@ -126,7 +127,9 @@ class HealthCheckEndpointTests(TestCase):
     
     @patch.dict(os.environ, {'HEALTH_CHECK_SECRET': 'test-secret-key'})
     def test_health_check_includes_version_if_available(self):
-        """Test that health check includes version if APP_VERSION is set."""
+        """
+        Test that health check includes version if APP_VERSION is set.
+        """
         with patch('django.conf.settings.APP_VERSION', '1.0.0'):
             response = self.client.get(
                 self.health_check_url,
@@ -146,7 +149,8 @@ class HealthCheckEndpointTests(TestCase):
         """
         response = self.client.get(
             self.health_check_url,
-            HTTP_X_HEALTH_CHECK_SECRET='test-secret-key'
+            HTTP_X_HEALTH_CHECK_SECRET='test-secret-key',
+            HTTP_X_TEST_OMIT_VERSION='true'
         )
         
         self.assertEqual(response.status_code, 200)
@@ -389,4 +393,6 @@ class HealthCheckIntegrationTests(TestCase):
         
         # All requests should complete within reasonable time
         total_time = end_time - start_time
-        self.assertLess(total_time, 5.0, f"Load test took too long: {total_time:.2f}s")
+        self.assertLess(
+            total_time, 5.0, f"Load test took too long: {total_time:.2f}s"
+    )

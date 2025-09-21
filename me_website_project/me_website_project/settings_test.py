@@ -7,15 +7,23 @@ all necessary configurations without requiring environment variables.
 
 from pathlib import Path
 import os
+import environ
+
+# Set up django-environ
+env = environ.Env()
 
 # Set environment variables for testing
-os.environ.setdefault('HEALTH_CHECK_SECRET', 'test-health-check-secret')
+# Set HEALTH_CHECK_SECRET directly in the environment for config_checks.py
+os.environ['HEALTH_CHECK_SECRET'] = 'test-health-check-secret'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'test-secret-key-for-testing-only-not-for-production'
+
+# Custom admin URL for testing
+SECRET_ADMIN_URL = 'admin'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -124,8 +132,11 @@ CACHES = {
     }
 }
 
-# Health check secret for testing
+# Health check secret for testing - also set in os.environ above
 HEALTH_CHECK_SECRET = 'test-health-check-secret'
+
+# This setting needs to be present for patching in tests to work
+APP_VERSION = '1.0.0-test'
 
 # Logging configuration for testing
 LOGGING = {
