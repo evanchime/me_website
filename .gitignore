@@ -12,3 +12,6 @@ __pycache__/
 
 # Static files generated from running collectstatics
 staticfiles/
+
+# Coverage reports
+.coverage

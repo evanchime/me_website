@@ -215,13 +215,13 @@ class ChoiceModelTests(TestCase):
         
         updated_choice = Choice.objects.get(id=choice.id)
         self.assertEqual(updated_choice.votes, 5)
-    
-    def test_choice_negative_votes(self):
-        """Test that choice can have negative votes."""
+
+    def test_choice_zero_votes(self):
+        """Test that choice can have zero votes (minimum value)."""
         choice_data = self.choice_data.copy()
-        choice_data['votes'] = -5
+        choice_data['votes'] = 0
         choice = Choice.objects.create(**choice_data)
-        self.assertEqual(choice.votes, -5)
+        self.assertEqual(choice.votes, 0)
 
 
 class BlogViewTests(TestCase):
