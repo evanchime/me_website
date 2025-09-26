@@ -96,16 +96,16 @@ echo -e "${YELLOW}Running tests with pytest...${NC}"
 # Run tests with pytest
 if [ -n "$SPECIFIC_APP" ]; then
     echo -e "${BLUE}Running tests for app: $SPECIFIC_APP${NC}"
-    python -m pytest $PYTEST_ARGS me_website_project/$SPECIFIC_APP/
+    python3 -m pytest $PYTEST_ARGS me_website_project/$SPECIFIC_APP/
 else
     if [[ "$PYTEST_ARGS" == "-v" ]]; then
         # If no specific args were provided beyond default -v
         echo -e "${BLUE}Running all tests${NC}"
-        python -m pytest -v me_website_project/
+        python3 -m pytest -v me_website_project/
     else
         # Run with provided arguments
         echo -e "${BLUE}Running with arguments: $PYTEST_ARGS${NC}"
-        python -m pytest $PYTEST_ARGS
+        python3 -m pytest $PYTEST_ARGS
     fi
 fi
 

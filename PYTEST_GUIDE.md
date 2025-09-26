@@ -151,37 +151,3 @@ def pytest_configure():
 ```bash
 ./run_pytest.sh --showlocals
 ```
-
-## Converting Django Tests to pytest Style
-
-While the existing Django tests work fine with pytest, you may want to refactor them to take advantage of pytest's features in the future:
-
-1. Use pytest fixtures instead of setUp/tearDown
-2. Use parameterized testing with @pytest.mark.parametrize
-3. Use pytest assertions instead of unittest assertions
-
-Example of a pytest-style test:
-
-```python
-import pytest
-from django.test import Client
-from django.urls import reverse
-
-@pytest.fixture
-def client():
-    return Client()
-
-@pytest.fixture
-def valid_user_data():
-    return {
-        'username': 'testuser',
-        'email': 'test@example.com',
-        'password1': 'TestPass123!',
-        'password2': 'TestPass123!'
-    }
-
-def test_valid_signup_form(client, valid_user_data):
-    response = client.post(reverse('signup'), valid_user_data)
-    assert response.status_code == 302
-    assert User.objects.filter(username='testuser').exists()
-```
