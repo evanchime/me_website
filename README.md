@@ -33,7 +33,7 @@ This website serves as my personal portfolio and blog. It showcases my projects,
 
 ## AWS
 
-The website lives [`here`](https://www.iplayishow.com) in AWS. It's been maintained on the [`aws`](https://github.com/evanchime/me_website/tree/aws) branch
+The website lives [`here`](https://www.iplayishow.com) in AWS. 
 
 ### The Architecture Diagram
 
