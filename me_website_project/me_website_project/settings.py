@@ -118,16 +118,14 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # locally.
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Database
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+DATABASES = {
+    'default': env.db('DATABASE_URL')
+}
+
 if DEBUG:
     # --- DEVELOPMENT-SPECIFIC SETTINGS ---
-
-    # Use a simple SQLite database for local development.
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / "db.sqlite3",
-        }
-    }
 
     # URL prefix for static files served by the development server.
     STATIC_URL = '/static/'
@@ -143,14 +141,6 @@ if DEBUG:
 
 else:
     # --- PRODUCTION-SPECIFIC SETTINGS ---
-
-    # Use PostgreSQL from a DATABASE_URL.
-    DATABASES = {
-        # The env.db() call will raise an error if DATABASE_URL is not 
-        # set in production, which is good practice to prevent 
-        # accidentally running with a wrong config.
-        'default': env.db('DATABASE_URL')
-    }
 
     # Add optional SSL settings for production if not in DATABASE_URL
     DATABASES['default']['OPTIONS'] = {
