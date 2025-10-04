@@ -1,9 +1,9 @@
 services:
   web:
-    image: evanchime/me_website:latest
-    # build:
-    #   context: ./me_website_project
-    #   dockerfile: Dockerfile
+    # image: evanchime/me_website:latest
+    build:
+      context: ./me_website_project
+      dockerfile: Dockerfile
     env_file:
       - .env
     volumes:
