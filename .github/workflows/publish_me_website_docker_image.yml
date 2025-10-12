@@ -1,0 +1,155 @@
+name: Django CI/CD with Pytest
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write      # Required for pushing to Docker Hub/GHCR
+  attestations: write  # Required for generating SLSA attestations
+  id-token: write      # Required for OIDC authentication with AWS
+
+jobs:
+  test:
+    name: Run Test Suite
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r me_website_project/requirements.txt
+          pip install pytest pytest-django pytest-cov
+
+      - name: Run tests with pytest
+        working-directory: ./me_website_project
+        run: |
+          pytest --tb=short --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./me_website_project/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  build-and-test-docker:
+    name: Build and Test Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./me_website_project
+          load: true
+          tags: local/me-website:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test in Docker container
+        run: |
+          docker run --rm \
+            --entrypoint "" \
+            local/me-website:test \
+            pytest
+
+  push-to-registries:
+    name: Push to ECR and Docker Hub with Attestation
+    needs: build-and-test-docker
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    runs-on: ubuntu-latest
+    
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+
+        - name: Extract metadata for Docker
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: |
+              ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_NAME }}
+            tags: |
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+              type=sha,format=short
+              type=raw,value=latest,enable={{is_default_branch}}
+
+        - name: Configure AWS credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
+            aws-region: ${{ secrets.AWS_REGION }}
+
+        - name: Login to Amazon ECR
+          uses: aws-actions/amazon-ecr-login@v2
+
+        - name: Login to Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+        - name: Build and push to ECR and Docker Hub
+          uses: docker/build-push-action@v5
+          with:
+            context: ./me_website_project
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            attestations: true
+
+        - name: Image scan
+          run: |
+            # Start the scan
+            aws ecr start-image-scan --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
+            
+            echo "Scanning image... This may take a few minutes."
+            
+            # Wait for the scan to complete before proceeding
+            aws ecr wait image-scan-complete --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
+            
+            echo "Scan complete. Retrieving findings."
+            
+            # Now, describe the findings. You can also add logic to fail the build here.
+            aws ecr describe-image-scan-findings --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
