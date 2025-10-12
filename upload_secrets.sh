@@ -8,7 +8,7 @@ set -e
 REPO="evanchime/me_website"
 
 # Use the first argument ($1) as the secrets file.
-# If $1 is not provided (is empty), default to "secrets.env".
+# If $1 is not provided, default to "secrets.env".
 SECRETS_FILE=${1:-"secrets.env"}
 
 # --- Script Logic ---
