@@ -4,6 +4,7 @@ services:
     build:
       context: ./me_website_project
       dockerfile: Dockerfile
+      target: production
     env_file:
       - .env
     volumes:
