@@ -26,7 +26,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,28 +73,46 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image for testing
-        uses: docker/build-push-action@v5
-        with:
-          context: ./me_website_project
-          load: true
-          tags: local/me-website:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test in Docker container
+      - name: Build Test Image and Run Container Tests
         run: |
-          docker run --rm \
-            --entrypoint "" \
-            local/me-website:test \
-            pytest
+          # Define file paths for clarity
+          DOCKER_IGNORE="me_website_project/.dockerignore"
+          DOCKER_IGNORE_TEST="me_website_project/.dockerignore.test"
+          DOCKER_IGNORE_BACKUP="me_website_project/.dockerignore.bak"
+
+          echo "Swapping .dockerignore for test build..."
+          # Back up the original .dockerignore
+          mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_BACKUP"
+          # Activate the test-specific .dockerignore
+          mv "$DOCKER_IGNORE_TEST" "$DOCKER_IGNORE"
+
+          echo "Building the test image…"
+          docker buildx build \
+            --target test \
+            --tag local/me-website:test \
+            --load \
+            --cache-to type=gha,mode=max \
+            --cache-from type=gha \
+            ./me_website_project
+
+          echo "Restoring original .dockerignore files..."
+          # Restore the test file first
+          mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_TEST"
+          # Restore the production file from backup
+          mv "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE"
+
+          echo "Running tests inside the container..."
+          docker run \
+            --rm \
+            --entrypoint "" \ 
+            local/me-website:test pytest
 
   push-to-registries:
     name: Push to ECR and Docker Hub with Attestation
     needs: build-and-test-docker
     if: github.ref == 'refs/heads/main' || github.event_name == 'release'
     runs-on: ubuntu-latest
-    
+
     steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -135,6 +153,7 @@ jobs:
           with:
             context: ./me_website_project
             push: true
+            target: production
             tags: ${{ steps.meta.outputs.tags }}
             labels: ${{ steps.meta.outputs.labels }}
             cache-from: type=gha

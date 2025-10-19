@@ -23,7 +23,3 @@ compose*
 
 # Local development directories
 staticfiles/
-
-# Exclude test files And directories
-**/tests.py
-**/tests/
