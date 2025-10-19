@@ -22,6 +22,9 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # =====================================================================
 FROM builder AS test
 
+# Set the PATH to include the user-installed packages
+ENV PATH="/root/.local/bin:${PATH}"
+
 # This stage inherits the installed packages from 'builder'.
 # Copy the application AND test code into it.
 # This COPY command will respect the .dockerignore file used during the build.
