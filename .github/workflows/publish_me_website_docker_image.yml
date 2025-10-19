@@ -74,40 +74,37 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Test Image and Run Container Tests
-        env:
-            IMAGE_TAG: local/me-website:test
         run: |
-          # Define file paths for clarity
-          DOCKER_IGNORE="me_website_project/.dockerignore"
-          DOCKER_IGNORE_TEST="me_website_project/.dockerignore.test"
-          DOCKER_IGNORE_BACKUP="me_website_project/.dockerignore.bak"
+            # Define the image tag as a shell variable
+            IMAGE_TAG="local/me-website:test"
 
-          echo "Swapping .dockerignore for test build..."
-          # Back up the original .dockerignore
-          mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_BACKUP"
-          # Activate the test-specific .dockerignore
-          mv "$DOCKER_IGNORE_TEST" "$DOCKER_IGNORE"
+            # Define file paths for clarity
+            DOCKER_IGNORE="me_website_project/.dockerignore"
+            DOCKER_IGNORE_TEST="me_website_project/.dockerignore.test"
+            DOCKER_IGNORE_BACKUP="me_website_project/.dockerignore.bak"
 
-          echo "Building the test image with tag: ${{ env.IMAGE_TAG }}"
-          docker buildx build \
+            echo "Swapping .dockerignore for test build..."
+            mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_BACKUP"
+            mv "$DOCKER_IGNORE_TEST" "$DOCKER_IGNORE"
+
+            echo "Building the test image with tag: $IMAGE_TAG"
+            docker buildx build \
             --target test \
-            --tag ${{ env.IMAGE_TAG }} \
+            --tag "$IMAGE_TAG" \
             --load \
             --cache-to type=gha,mode=max \
             --cache-from type=gha \
             ./me_website_project
 
-          echo "Restoring original .dockerignore files..."
-          # Restore the test file first
-          mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_TEST"
-          # Restore the production file from backup
-          mv "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE"
+            echo "Restoring original .dockerignore files..."
+            mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_TEST"
+            mv "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE"
 
-          echo "Running tests inside the container with tag: ${{ env.IMAGE_TAG }}"
-          docker run \
+            echo "Running tests inside the container with tag: $IMAGE_TAG"
+            docker run \
             --rm \
-            --entrypoint "" \ 
-            ${{ env.IMAGE_TAG }} \
+            --entrypoint "" \
+            "$IMAGE_TAG" \
             pytest
 
   push-to-registries:
