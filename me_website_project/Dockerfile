@@ -83,4 +83,6 @@ COPY --chown=appuser:appuser . .
 RUN chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["sh", "-c", "gunicorn --worker-class gevent --workers ${GUNICORN_WORKERS:-4} --timeout ${GUNICORN_TIMEOUT:-30} me_website_project.wsgi:application --bind 0.0.0.0:8000"]
+CMD ["gunicorn", "--worker-class", "gevent", "--workers", "4", "--timeout", "30", "me_website_project.wsgi:application", "--bind", "0.0.0.0:8000"]
+
+
