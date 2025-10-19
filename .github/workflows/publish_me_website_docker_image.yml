@@ -88,7 +88,7 @@ jobs:
           # Activate the test-specific .dockerignore
           mv "$DOCKER_IGNORE_TEST" "$DOCKER_IGNORE"
 
-          echo "Building the test image…"
+          echo "Building the test image with tag: ${{ env.IMAGE_TAG }}"
           docker buildx build \
             --target test \
             --tag ${{ env.IMAGE_TAG }} \
@@ -103,7 +103,7 @@ jobs:
           # Restore the production file from backup
           mv "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE"
 
-          echo "Running tests inside the container..."
+          echo "Running tests inside the container with tag: ${{ env.IMAGE_TAG }}"
           docker run \
             --rm \
             --entrypoint "" \ 
