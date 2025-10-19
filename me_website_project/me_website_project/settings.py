@@ -139,6 +139,9 @@ if DEBUG:
     SECURE_SSL_REDIRECT = False
     CSRF_COOKIE_HTTPONLY = False
 
+    # Use console email backend in development
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
 else:
     # --- PRODUCTION-SPECIFIC SETTINGS ---
 
@@ -176,6 +179,15 @@ else:
     SECURE_SSL_REDIRECT = True
     CSRF_COOKIE_HTTPONLY = True 
 
+    # Configure email
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
+    # You might need an Google app password for security
+    EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD')
+
 # Internationalization
 LANGUAGE_CODE = 'en-us'
 
@@ -192,14 +204,6 @@ LOGIN_REDIRECT_URL = "home" # Redirect to home page after login
 
 LOGOUT_REDIRECT_URL = "home" # Redirect to home page after logout
 
-# Configure email
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
-# You might need an Google app password for security
-EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD')
 
 # Optional but recommended
 APP_VERSION = env.str("APP_VERSION", "1.0.0")
