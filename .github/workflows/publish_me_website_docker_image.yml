@@ -74,6 +74,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Test Image and Run Container Tests
+        env:
+            IMAGE_TAG: local/me-website:test
         run: |
           # Define file paths for clarity
           DOCKER_IGNORE="me_website_project/.dockerignore"
@@ -89,7 +91,7 @@ jobs:
           echo "Building the test image…"
           docker buildx build \
             --target test \
-            --tag local/me-website:test \
+            --tag ${{ env.IMAGE_TAG }} \
             --load \
             --cache-to type=gha,mode=max \
             --cache-from type=gha \
@@ -105,7 +107,8 @@ jobs:
           docker run \
             --rm \
             --entrypoint "" \ 
-            local/me-website:test pytest
+            ${{ env.IMAGE_TAG }} \
+            pytest
 
   push-to-registries:
     name: Push to ECR and Docker Hub with Attestation
