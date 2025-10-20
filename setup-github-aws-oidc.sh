@@ -81,7 +81,6 @@ main() {
         "StringLike": {
             "token.actions.githubusercontent.com:sub":[
                 "repo:evanchime/me_website:ref:refs/heads/main",
-                "repo:evanchime/me_website:ref:refs/heads/feature",
                 "repo:evanchime/me_website:ref:refs/heads/develop",
                 "repo:evanchime/me_website:release"
             ]
