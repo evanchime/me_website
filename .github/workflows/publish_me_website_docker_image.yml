@@ -109,7 +109,7 @@ jobs:
   push-to-registries:
     name: Push to ECR and Docker Hub with Attestation
     needs: build-and-test-docker
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
