@@ -66,30 +66,32 @@ main() {
     # 2. Create trust policy
     cat > github-trust-policy.json << EOF
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::$ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-            "token.actions.githubusercontent.com:aud":"sts.amazonaws.com"
-        },
-        "StringLike": {
-            "token.actions.githubusercontent.com:sub":[
-                "repo:evanchime/me_website:ref:refs/heads/main",
-                "repo:evanchime/me_website:ref:refs/heads/develop",
-                "repo:evanchime/me_website:release"
-            ]
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::$account_id:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+                },
+                "StringLike": {
+                    "token.actions.githubusercontent.com:sub": [
+                        "repo:evanchime/me_website:ref:refs/heads/main",
+                        "repo:evanchime/me_website:ref:refs/heads/develop",
+                        "repo:evanchime/me_website:ref:refs/tags/*"
+                    ]
+                }
+            }
         }
-      }
-    }
-  ]
+    ]
 }
 EOF
+
+
     
     # 3. Check/Create Role
     if check_role_exists "$ROLE_NAME"; then
