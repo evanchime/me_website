@@ -90,8 +90,6 @@ main() {
     ]
 }
 EOF
-
-
     
     # 3. Check/Create Role
     if check_role_exists "$ROLE_NAME"; then
@@ -136,6 +134,15 @@ EOF
                 "ecr:GetAuthorizationToken"
             ],
             "Resource": "*"
+        },
+        {
+            "Sid": "AllowScanningAndDescribe",
+            "Effect": "Allow",
+            "Action": [
+                "ecr:StartImageScan",
+                "ecr:DescribeImages" 
+            ],
+            "Resource": "arn:aws:ecr:${AWS_REGION}:${account_id}:repository/${ECR_REPO_NAME}"
         }
     ]
 }
