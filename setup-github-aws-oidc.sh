@@ -148,9 +148,30 @@ EOF
 }
 EOF
     
-    # 5. Check/Create Policy
+    # 5. Check/Create/Update Policy
+    local account_id=$(aws sts get-caller-identity --query Account --output text)
+    local policy_arn="arn:aws:iam::${account_id}:policy/${POLICY_NAME}"
+
     if check_policy_exists "$POLICY_NAME"; then
-        log_warn "Policy '$POLICY_NAME' already exists"
+        log_warn "Policy '$POLICY_NAME' already exists. Creating a new version to apply updates..."
+        
+        # Get the ARN of the policy
+        local policy_arn_to_update=$(aws iam get-policy --policy-arn "$policy_arn" --query 'Policy.Arn' --output text)
+
+        # Create a new version of the policy
+        aws iam create-policy-version \
+            --policy-arn "$policy_arn_to_update" \
+            --policy-document file://ecr-permissions-policy.json \
+            --set-as-default >/dev/null
+
+        # Optional: Clean up old policy versions to stay within the 5-version limit
+        local versions=$(aws iam list-policy-versions --policy-arn "$policy_arn_to_update" --query 'Versions[?IsDefaultVersion==`false`].VersionId' --output text)
+        for version_id in $versions; do
+            log_info "Deleting old policy version: $version_id"
+            aws iam delete-policy-version --policy-arn "$policy_arn_to_update" --version-id "$version_id"
+        done
+
+        log_info "✅ Policy updated with new version."
     else
         log_info "Creating policy '$POLICY_NAME'..."
         aws iam create-policy \
