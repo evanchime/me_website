@@ -148,6 +148,7 @@ jobs:
             password: ${{ secrets.DOCKERHUB_TOKEN }}
 
         - name: Build and push to ECR and Docker Hub
+          id: build-and-push
           uses: docker/build-push-action@v5
           with:
             context: ./me_website_project
@@ -159,17 +160,11 @@ jobs:
             cache-to: type=gha,mode=max
             attestations: true
 
-        - name: Image scan
-          run: |
-            # Start the scan
-            aws ecr start-image-scan --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
-            
-            echo "Scanning image... This may take a few minutes."
-            
-            # Wait for the scan to complete before proceeding
-            aws ecr wait image-scan-complete --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
-            
-            echo "Scan complete. Retrieving findings."
-            
-            # Now, describe the findings. You can also add logic to fail the build here.
-            aws ecr describe-image-scan-findings --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-id imageTag=${{ github.sha }}
+        - name: Scan image for vulnerabilities
+          uses: aws-actions/amazon-ecr-scan@v1
+          with:
+            ecr_repository_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+            image_digest: ${{ steps.build-and-push.outputs.digest }}
+            # Make the build fail if vulnerabilities are found
+            fail_on_critical: true 
+            fail_on_high: true
