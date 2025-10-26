@@ -92,7 +92,7 @@ To run this project locally, follow these steps:
 - Nginx Configuration
 
 ### Local Development
-1. After [Installation](#installation), create a `.env` file in the Django project directory (use the template in [ENVIRONMENT](ENVIRONMENT.md)).
+1. After [Installation](#installation), create a `.env` file in the project root (use the template in [ENVIRONMENT](ENVIRONMENT.md)).
 2. Update `.env` with your settings (e.g., `SECRET_KEY`, `DEBUG=True`).
 3. Navigate to the Django project directory.
 4. Run migrations:
@@ -109,7 +109,7 @@ To run this project locally, follow these steps:
    ```
 
 ### Docker Development
-1. After [Installation](#installation), create a `.env` file in the project root (use the template in [ENVIRONMENT](ENVIRONMENT.md)).
+1. After [Installation](#installation), create a `.env` file in the Django project directory (use the template in [ENVIRONMENT](ENVIRONMENT.md)).
 2. Update `.env` with your settings (e.g., `SECRET_KEY`, `DEBUG=False`).
 3. Don't forget to uncomment image/build section respectively in the compose file
 
