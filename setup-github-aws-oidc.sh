@@ -136,13 +136,12 @@ EOF
             "Resource": "*"
         },
         {
-            "Sid": "AllowScanningAndDescribe",
+            "Sid": "AllowInspectorScan",
             "Effect": "Allow",
             "Action": [
-                "ecr:StartImageScan",
-                "ecr:DescribeImages" 
+                "inspector2:ScanSbom"
             ],
-            "Resource": "arn:aws:ecr:${AWS_REGION}:${account_id}:repository/${ECR_REPO_NAME}"
+            "Resource": "*" 
         }
     ]
 }

@@ -147,24 +147,49 @@ jobs:
             username: ${{ secrets.DOCKERHUB_USERNAME }}
             password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-        - name: Build and push to ECR and Docker Hub
-          id: build-and-push
+        - name: Build image for scanning
           uses: docker/build-push-action@v5
           with:
             context: ./me_website_project
-            push: true
             target: production
-            tags: ${{ steps.meta.outputs.tags }}
-            labels: ${{ steps.meta.outputs.labels }}
+            load: true
+            push: false
+            tags: me-website-scan:latest # A temporary, predictable tag
             cache-from: type=gha
             cache-to: type=gha,mode=max
-            attestations: true
 
-        - name: Scan image for vulnerabilities
-          uses: aws-actions/amazon-ecr-scan@v1
+        - name: Scan local image with Amazon Inspector
+          uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
+          id: inspector-scan 
           with:
-            ecr_repository_name: ${{ secrets.ECR_REPOSITORY_NAME }}
-            image_digest: ${{ steps.build-and-push.outputs.digest }}
-            # Make the build fail if vulnerabilities are found
-            fail_on_critical: true 
-            fail_on_high: true
+            artifact_type: 'container'
+            artifact_path: 'me-website-scan:latest'
+            critical_threshold: 1
+            high_threshold: 1
+            # Set the others to a high number as I don't care about them
+            medium_threshold: 999
+            low_threshold: 999
+            other_threshold: 999
+
+        - name: Check vulnerability thresholds
+          if: always()
+          run: |
+            echo "Scan complete. Checking thresholds..."
+            VULNERABILITY_THRESHOLD_EXCEEDED=${{ steps.inspector-scan.outputs.vulnerability_threshold_exceeded }}
+            echo "Vulnerability threshold exceeded: $VULNERABILITY_THRESHOLD_EXCEEDED"
+            if [[ "$VULNERABILITY_THRESHOLD_EXCEEDED" == "1" ]]; then
+                echo "::error::Vulnerability threshold exceeded. Failing the build."
+                exit 1
+            else
+                echo "Vulnerability thresholds not exceeded. Proceeding."
+            fi
+
+        - name: Push image to registries
+          uses: docker/build-push-action@v5
+          with:
+            context: ./me_website_project
+            target: production
+            push: true
+            tags: ${{ steps.meta.outputs.tags }} 
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha # Use the cache from the scan-build step
