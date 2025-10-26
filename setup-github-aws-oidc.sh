@@ -139,7 +139,7 @@ EOF
             "Sid": "AllowInspectorScan",
             "Effect": "Allow",
             "Action": [
-                "inspector2:ScanSbom"
+                "inspector-scan:ScanSbom"
             ],
             "Resource": "*" 
         }
