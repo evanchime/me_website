@@ -148,7 +148,7 @@ jobs:
             password: ${{ secrets.DOCKERHUB_TOKEN }}
 
         - name: Build image for scanning
-          uses: docker/build-push-action@v5
+          uses: docker/build-push-action@v6
           with:
             context: ./me_website_project
             target: production
@@ -194,7 +194,7 @@ jobs:
                 *.md
 
         - name: Push image to registries
-          uses: docker/build-push-action@v5
+          uses: docker/build-push-action@v6
           with:
             context: ./me_website_project
             target: production
