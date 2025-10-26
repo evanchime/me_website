@@ -1,4 +1,6 @@
+# =====================================================================
 # Stage 1: Builder (install dependencies)
+# =====================================================================
 FROM python:3.11-slim AS builder
 
 # Install essential build dependencies
@@ -11,27 +13,48 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY requirements.txt .
+# Install python packages into a user-specific directory
 RUN pip install --user --no-cache-dir -r requirements.txt
 
-# Stage 2: Runtime (lean production image)
-FROM python:3.11-slim
+
+# =====================================================================
+# Stage 2: Test Runner (includes test code and test dependencies)
+# =====================================================================
+FROM builder AS test
+
+# Set the PATH to include the user-installed packages
+ENV PATH="/root/.local/bin:${PATH}"
+
+# This stage inherits the installed packages from 'builder'.
+# Copy the application AND test code into it.
+# This COPY command will respect the .dockerignore file used during the build.
+COPY . .
+
+
+# =====================================================================
+# Stage 3: Production (lean final image)
+# =====================================================================
+# ...
+FROM python:3.11-slim AS production
+
+# Update OS packages to patch known vulnerabilities first
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
 # Install runtime dependencies for databases
 RUN apt-get update && apt-get install -y --no-install-recommends \
-libpq5 \
-libmariadb3 \
-postgresql-client \
-default-mysql-client \
-mariadb-client \
-ca-certificates \
-curl \
-&& rm -rf /var/lib/apt/lists/*
+    libpq5 \
+    libmariadb3 \
+    postgresql-client \
+    default-mysql-client \
+    mariadb-client \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.local/bin:${PATH}"
-
 ENV PYTHONPATH="/app/.local/lib/python3.11/site-packages${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Fallback UID if not provided
@@ -67,4 +90,6 @@ COPY --chown=appuser:appuser . .
 RUN chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["sh", "-c", "gunicorn --workers ${GUNICORN_WORKERS:-4} --timeout ${GUNICORN_TIMEOUT:-30} me_website_project.wsgi:application --bind 0.0.0.0:8000"]
+CMD ["gunicorn", "--worker-class", "gevent", "--workers", "4", "--timeout", "30", "me_website_project.wsgi:application", "--bind", "0.0.0.0:8000"]
+
+

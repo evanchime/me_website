@@ -4,12 +4,11 @@ services:
     build:
       context: ./me_website_project
       dockerfile: Dockerfile
+      target: production
     env_file:
       - .env
     volumes:
       - static_volume:/app/staticfiles
-    # extra_hosts:
-    # - "host.docker.internal:host-gateway"
     networks:
       - app_network
     restart: unless-stopped
