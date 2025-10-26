@@ -184,6 +184,15 @@ jobs:
                 echo "Vulnerability thresholds not exceeded. Proceeding."
             fi
 
+        - name: Upload vulnerability scan results
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: inspector-scan-results
+            path: |
+                *.csv
+                *.md
+
         - name: Push image to registries
           uses: docker/build-push-action@v5
           with:
