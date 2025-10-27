@@ -1,6 +1,6 @@
 # Me Website
 
-[![Me_Website Docker image](https://github.com/evanchime/me_website/actions/workflows/publish_me_website_docker_image.yml/badge.svg)](https://github.com/evanchime/me_website/actions/workflows/publish_me_website_docker_image.yml)
+[![Django CI/CD with Pytest](https://github.com/evanchime/me_website/actions/workflows/publish_me_website_docker_image.yml/badge.svg)](https://github.com/evanchime/me_website/actions/workflows/publish_me_website_docker_image.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/evanchime/me_website)](https://github.com/evanchime/me_website/releases/latest)
 
 
