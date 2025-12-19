@@ -159,8 +159,14 @@ module "efs" {
   version = "~> 1.0"
   
   name = "${local.cluster_name}-efs"
+  creation_token = "${local.cluster_name}-efs-token"
   
-  # Security group for EFS - allow NFS from EKS cluster
+  # Mount targets / Security group for EFS - allow NFS from EKS cluster
+  mount_targets = {
+    for subnet in module.vpc.private_subnets : subnet => {
+      subnet_id = subnet
+    }
+  }
   security_group_description = "EFS for me_website EKS cluster"
   security_group_vpc_id      = module.vpc.vpc_id
   security_group_rules = {
@@ -195,13 +201,12 @@ module "efs" {
 }
 
 module "me_website_irsa_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.20"
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "6.2.3"
 
-  role_name = "${local.cluster_name}-me_website-app"
+  name = "${local.cluster_name}-me_website-app"
 
-  # Attach necessary policies for me_website
-  role_policy_arns = {
+   policies = {
     me_website_app = aws_iam_policy.me_website_app.arn
   }
 
@@ -288,15 +293,15 @@ resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
   }
 }
 
+resource "aws_iam_role" "rds_secrets_rotation_lambda" {
+  name               = "rds_secrets_rotation_lambda"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+
 resource "aws_iam_role_policy" "lambda_permissions_policy" {
   name = "lambda_permissions_policy"
   role = aws_iam_role.rds_secrets_rotation_lambda.id
   policy = data.aws_iam_policy_document.lambda_permissions.json
-}
-
-resource "aws_iam_role" "rds_secrets_rotation_lambda" {
-  name               = "rds_secrets_rotation_lambda"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
