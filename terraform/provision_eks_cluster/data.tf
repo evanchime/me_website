@@ -36,7 +36,7 @@ data "aws_iam_policy_document" "me_website_app" {
       "secretsmanager:DescribeSecret"
     ]
     resources = [
-      "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:me_website-secrets-*"
+      aws_secretsmanager_secret.rds_master_credentials.arn
     ]
   }
 
@@ -71,7 +71,7 @@ data "aws_route_tables" "rds_vpc_route_tables" {
     vpc_id = data.aws_vpc.rds_vpc.id
 }
 
-data "aws_iam_policy_document" "assume_role" {
+data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRole"]
