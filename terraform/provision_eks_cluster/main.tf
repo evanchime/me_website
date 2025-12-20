@@ -298,15 +298,15 @@ resource "aws_iam_role" "rds_secrets_rotation_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.rds_secrets_rotation_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role_policy" "lambda_permissions_policy" {
   name = "lambda_permissions_policy"
   role = aws_iam_role.rds_secrets_rotation_lambda.id
   policy = data.aws_iam_policy_document.lambda_permissions.json
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
-  role       = aws_iam_role.rds_secrets_rotation_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "terraform_data" "rds_lambda_install_dependencies" {
