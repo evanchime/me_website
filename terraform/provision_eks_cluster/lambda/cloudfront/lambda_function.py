@@ -241,13 +241,18 @@ def test_secret(service_client, arn, token):
     try:
         dist_detail = cloudfront_client.get_distribution(Id=distribution_id)
         cloudfront_domain = dist_detail['Distribution']['DomainName']
-        logger.info(f"testSecret: Testing against CloudFront domain: {cloudfront_domain}")
+        logger.info(
+            f"testSecret: Testing against CloudFront domain: {cloudfront_domain}"
+        )
     except Exception as e:
-        logger.error(f"testSecret: Failed to get CloudFront distribution details: {e}")
+        logger.error(
+            f"testSecret: Failed to get CloudFront distribution details: {e}"
+        )
         raise
 
-    # --- LAYER 1: Test CloudFront with the New Secret ---
-    logger.info("testSecret: LAYER 1 - Testing CloudFront endpoint with new secret...")
+    logger.info(
+        "testSecret: LAYER 1 - Testing CloudFront endpoint with new secret..."
+    )
     
     # Configure a retry strategy for transient network issues
     retry_strategy = Retry(
@@ -261,10 +266,15 @@ def test_secret(service_client, arn, token):
 
     try:
         ssm_client = boto3.client('ssm')
-        param = ssm_client.get_parameter(Name='/me_website/prod/HEALTH_CHECK_SECRET', WithDecryption=True)
+        param = ssm_client.get_parameter(
+            Name='/me_website/prod/HEALTH_CHECK_SECRET', WithDecryption=True
+        )
         health_check_secret = param['Parameter']['Value']
     except Exception as e:
-        logger.error(f"FAILED to retrieve HEALTH_CHECK_SECRET from SSM Parameter Store: {e}")
+        logger.error(
+            f"FAILED to retrieve HEALTH_CHECK_SECRET from SSM Parameter Store: "
+            f"{e}"
+        )
         raise e 
    
     test_headers = {
@@ -280,23 +290,33 @@ def test_secret(service_client, arn, token):
     try:
         # Use a relatively short timeout; we will retry
         response = session.get(test_url, headers=test_headers, timeout=10)
-        response.raise_for_status()  # Raises an HTTPError for bad status (4xx or 5xx)
+        response.raise_for_status()  
 
         # Parse the JSON and check the status field
         health_data = response.json()
         if health_data.get("status") == "healthy":
-            logger.info(f"testSecret: SUCCESS - CloudFront & ALB responded with status {response.status_code}. Application health check PASSED. Status is 'healthy'.")
+            logger.info(
+                f"testSecret: SUCCESS - CloudFront & ALB responded with status "
+                f"{response.status_code}. Application health check PASSED. "
+                f"Status is 'healthy'."
+            )
             return True
         else:
             status_received = health_data.get("status", "Status key not found")
-            raise ValueError(f"Application health check FAILED. Status was '{status_received}'.")
+            raise ValueError(
+                f"Application health check FAILED. "
+                f"Status was '{status_received}'."
+            )
         
     except requests.exceptions.HTTPError as e:
         # Specific handling for 403/404 which likely indicates header rejection
         if e.response.status_code in [403, 404]:
-            error_msg = (f"CloudFront/ALB rejected the request (HTTP {e.response.status_code}). "
-                         f"This strongly indicates the new secret '{header_name}' header value "
-                         f"was not accepted. Check: 1) ALB listener rules, 2) Header name spelling.")
+            error_msg = (
+                f"CloudFront/ALB rejected the request (HTTP "
+                f"{e.response.status_code}). This strongly indicates the "
+                f"new secret '{header_name}' header value was not accepted. "
+                f"Check: 1) ALB listener rules, 2) Header name spelling."
+            )
             logger.error(f"testSecret: {error_msg}")
             # Log the response body for more clues if safe
             logger.error(f"testSecret: Response body: {e.response.text[:500]}")
@@ -305,11 +325,17 @@ def test_secret(service_client, arn, token):
             logger.error(f"testSecret: {error_msg}")
         raise
     except requests.exceptions.ConnectionError as e:
-        error_msg = f"Failed to connect to CloudFront domain {cloudfront_domain}. Check: 1) Distribution is deployed, 2) DNS is resolving."
+        error_msg = (
+            f"Failed to connect to CloudFront domain {cloudfront_domain}. "
+            f"Check: 1) Distribution is deployed, 2) DNS is resolving."
+        )
         logger.error(f"testSecret: {error_msg}. Underlying error: {e}")
         raise
     except requests.exceptions.Timeout as e:
-        error_msg = "Request to CloudFront timed out. The ALB or application might be unreachable or slow."
+        error_msg = (
+            "Request to CloudFront timed out. "
+            "The ALB or application might be unreachable or slow."
+        )
         logger.error(f"testSecret: {error_msg}")
         raise
     except requests.exceptions.RequestException as e:
