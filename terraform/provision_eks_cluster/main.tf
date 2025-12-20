@@ -220,6 +220,80 @@ module "me_website_irsa_role" {
   tags = local.tags
 }
 
+module "alb_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${local.cluster_name}-alb-sg"
+  description = "Security group for internal ALB with CloudFront VPC Origin"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_with_cidr_blocks = [
+    {
+        rule        = "https-443-tcp"
+        cidr_blocks = module.vpc.vpc_cidr_block
+        description = "CloudFront VPC Origin ENIs to ALB"
+    }
+  ]
+
+  egress_with_cidr_blocks = [
+    {
+        rule        = "http-80-tcp"
+        cidr_blocks = module.vpc.vpc_cidr_block
+        description = "ALB to EKS pods"
+    }
+  ]
+  tags = local.tags
+}
+
+module "eks_primary_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+  name        = "${local.cluster_name}-primary-sg"
+  description = "EKS cluster security group"
+  vpc_id      = module.vpc.vpc_id
+  security_group_id = module.eks.cluster_primary_security_group_id
+
+  ingress_with_source_security_group_id = [
+    {
+        rule                     = "http-80-tcp"
+        source_security_group_id = module.alb_security_group.security_group_id
+        description              = "From ALB to me_website pods"
+    },
+    {
+        rule                     = "all-all"  # Allow internal EKS communication
+        source_security_group_id = module.eks.cluster_primary_security_group_id
+        description = "Internal EKS cluster communication"
+    }
+  ]
+    
+  egress_with_cidr_blocks = [
+    {
+        rule        = "https-443-tcp"
+        cidr_blocks = "0.0.0.0/0"
+        description = "me_website to AWS services & internet"
+    },
+    {
+        rule        = "postgresql-tcp"
+        cidr_blocks = module.vpc.vpc_cidr_block
+        description = "me_website to RDS PostgreSQL"
+    },
+    {
+        rule        = "dns-udp"
+        cidr_blocks = module.vpc.vpc_cidr_block
+        description = "DNS resolution"
+    },
+    {
+        rule        = "dns-tcp"
+        cidr_blocks = module.vpc.vpc_cidr_block
+        description = "DNS resolution"
+
+    }
+  ] 
+
+  tags = local.tags
+}
+
 # IAM policy for me_website application
 resource "aws_iam_policy" "me_website_app" {
   name        = "${local.cluster_name}-me_website-app-policy"
@@ -393,30 +467,4 @@ resource "aws_vpc_security_group_ingress_rule" "allow_lambda_to_rds" {
   referenced_security_group_id = aws_security_group.lambda_rds_sg.id
   from_port         = 5432
   to_port           = 5432
-}
-
-resource "aws_vpc_security_group_egress_rule" "alb" {
-  security_group_id = aws_security_group.lambda_rds_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 0
-  ip_protocol       = "-1"
-  to_port           = 0
-}
-
-resource "aws_security_group" "cloudfront_alb_sg" {
-  name        = "cloudfront-alb-access"
-  description = "Allow CloudFront to access ALB"
-  vpc_id      = data.aws_vpc.rds_vpc.id
-  tags = {
-    Name = "cloudfront-alb-sg"
-  }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_cloudfront_to_alb" {
-  security_group_id = aws_security_group.cloudfront_alb_sg.id
-  description       = "Allow CloudFront to access ALB"
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-  cidr_ipv4         = module.vpc.vpc_cidr_block
 }
