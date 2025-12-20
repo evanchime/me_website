@@ -7,6 +7,7 @@ provider "aws" {
 
 locals {
   cluster_name = "me_website-eks-${random_string.suffix.result}"
+  health_check_secret_version = 1
   tags = {
     Project     = "me-website"
     Environment = "production"
