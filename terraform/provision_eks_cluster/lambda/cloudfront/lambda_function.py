@@ -1,11 +1,14 @@
 # lambda_function.py
-from datetime import time
+import base64
 import boto3
 import logging
 import os
 import json
-from kubernetes import client, config
 import requests
+from datetime import time
+from botocore.signers import RequestSigner
+from kubernetes import client
+from kubernetes.client import V1ObjectMeta, ApiClient
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -17,8 +20,14 @@ logger.setLevel(logging.INFO)
 secrets_client = boto3.client('secretsmanager')
 cloudfront_client = boto3.client('cloudfront')
 
-# Kubernetes client - will be configured dynamically
-k8s_api = None
+# Global cache
+_cached_k8s_client = None
+_cached_token = None
+_cached_token_timestamp = None
+_cached_cluster_name = None
+
+# Refresh slightly before the 15‑minute expiry
+TOKEN_TTL_SECONDS = 14 * 60  
 
 # --- Helper Functions ---
 def get_pending_secret(service_client, arn, token):
@@ -116,6 +125,95 @@ def update_cloudfront_header(secret_value):
         Id=distribution_id, WaiterConfig={'Delay': 30, 'MaxAttempts': 60}
     )
     logger.info("CloudFront deployment complete")
+    
+class EKSClientCache:
+    TOKEN_TTL_SECONDS = 14 * 60  # refresh before 15‑minute expiry
+
+    def __init__(self):
+        self.k8s_client = None
+        self.token = None
+        self.token_timestamp = None
+        self.cluster_name = None
+
+    def get_cluster_info(self, cluster_name):
+        eks = boto3.client("eks")
+        cluster = eks.describe_cluster(name=cluster_name)["cluster"]
+
+        endpoint = cluster["endpoint"]
+        ca_data = cluster["certificateAuthority"]["data"]
+        ca_cert = base64.b64decode(ca_data)
+
+        return endpoint, ca_cert, cluster["name"]
+
+    def generate_token(self):
+        session = boto3.session.Session()
+        sts = session.client("sts")
+
+        signer = RequestSigner(
+            sts.meta.service_model.service_name,
+            session.region_name,
+            sts._request_signer._credentials,
+            sts._request_signer._event_emitter
+        )
+
+        url = signer.generate_presigned_url(
+            request_dict={
+                "method": "GET",
+                "url": f"https://sts.{session.region_name}.amazonaws.com/",
+                "headers": {},
+                "body": ""
+            },
+            operation_name="GetCallerIdentity",
+            expires_in=60,
+            region_name=session.region_name
+        )
+
+        return (
+            "k8s-aws-v1." + 
+            base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+        )
+
+    def token_expired(self):
+        if self.token_timestamp is None:
+            return True
+        return (time.time() - self.token_timestamp) > self.TOKEN_TTL_SECONDS
+
+    def get_client(self, cluster_name):
+        # Reuse if valid
+        if (
+            self.k8s_client
+            and self.cluster_name == cluster_name
+            and not self.token_expired()
+        ):
+            return self.k8s_client
+
+        # Otherwise rebuild
+        endpoint, ca_cert, _ = self.get_cluster_info(cluster_name)
+        token = self.generate_token()
+
+        ca_path = "/tmp/ca.crt"
+        if not os.path.exists(ca_path):
+            with open(ca_path, "wb") as f:
+                f.write(ca_cert)
+
+        cfg = client.Configuration()
+        cfg.host = endpoint
+        cfg.verify_ssl = True
+        cfg.ssl_ca_cert = ca_path
+        cfg.api_key = {"authorization": "Bearer " + token}
+
+        api_client = ApiClient(cfg)
+
+        # Update cache
+        self.k8s_client = client.NetworkingV1Api(api_client)
+        self.token = token
+        self.token_timestamp = time.time()
+        self.cluster_name = cluster_name
+
+        return self.k8s_client
+
+eks_cache = EKSClientCache()
+
 
 def update_kubernetes_ingress(secret_value):
     """
@@ -124,16 +222,12 @@ def update_kubernetes_ingress(secret_value):
     ingress_name = os.environ['K8S_INGRESS_NAME']
     ingress_namespace = os.environ['K8S_INGRESS_NAMESPACE']
     header_name = os.environ.get('CUSTOM_HEADER_NAME', 'X-Secret')
+    
+    k8s_api = eks_cache.get_client(os.environ["CLUSTER_NAME"])
 
-    # Initialize Kubernetes client (assumes Lambda has necessary IAM role)
-    global k8s_api
-    if k8s_api is None:
-        # This works if Lambda has IRSA role configured for EKS access
-        config.load_incluster_config()  # Inside Lambda pod
-        k8s_api = client.NetworkingV1Api()
+    annotation_key = "alb.ingress.kubernetes.io/conditions.secure-rule"
 
-    # Construct the new condition annotation
-    # This matches the annotation format we discussed earlier
+    # Build the new condition JSON
     new_condition = json.dumps([{
         "field": "http-header",
         "httpHeaderConfig": {
@@ -142,29 +236,44 @@ def update_kubernetes_ingress(secret_value):
         }
     }])
 
-    annotation_key = "alb.ingress.kubernetes.io/conditions.secure-rule"
+    try:
+        # Read the existing ingress
+        ingress = k8s_api.read_namespaced_ingress(
+            name=ingress_name,
+            namespace=ingress_namespace
+        )
 
-    # Create patch body
-    patch_body = {
-        "metadata": {
-            "annotations": {
-                annotation_key: new_condition
+        # Ensure metadata and annotations exist
+        if ingress.metadata is None:
+            ingress.metadata = V1ObjectMeta()
+
+        if ingress.metadata.annotations is None:
+            ingress.metadata.annotations = {}
+
+        # Modify only the annotation we care about
+        ingress.metadata.annotations[annotation_key] = new_condition
+
+        # Patch the ingress with the updated metadata
+        patch_body = {
+            "metadata": {
+                "annotations": ingress.metadata.annotations
             }
         }
-    }
 
-    try:
-        # Patch the Ingress resource
         k8s_api.patch_namespaced_ingress(
             name=ingress_name,
             namespace=ingress_namespace,
             body=patch_body
         )
+
         logger.info(
             f"Successfully patched Ingress {ingress_namespace}/{ingress_name}"
         )
+
     except Exception as e:
-        logger.error(f"Failed to patch Kubernetes Ingress: {e}")
+        logger.error(
+            f"Failed to patch Ingress {ingress_namespace}/{ingress_name}: {e}"
+        )
         raise
 
 # --- Secrets Manager Template Functions ---
