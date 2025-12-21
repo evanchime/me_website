@@ -12,27 +12,10 @@ terraform {
   }
 }
 
-data "terraform_remote_state" "eks" {
-  backend = "remote"
-
-  config = {
-    organization = "hashicorp-training"
-    workspaces = {
-      name = "hcup-be-shared"
-    }
-  }
-}
-
 # Retrieve EKS cluster information
 provider "aws" {
   region = data.terraform_remote_state.eks.outputs.region
 }
-
-data "aws_eks_cluster" "cluster" {
-  name = data.terraform_remote_state.eks.outputs.cluster_name
-}
-
-data "aws_caller_identity" "current" {}
 
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
@@ -59,6 +42,73 @@ provider "helm" {
       command     = "aws"
     }
   }
+}
+
+data "terraform_remote_state" "eks" {
+  backend = "remote"
+
+  config = {
+    organization = "hashicorp-training"
+    workspaces = {
+      name = "hcup-be-shared"
+    }
+  }
+}
+
+data "aws_eks_cluster" "cluster" {
+  name = data.terraform_remote_state.eks.outputs.cluster_name
+}
+
+data "aws_caller_identity" "current" {}
+
+
+data "kubernetes_config_map" "aws_auth" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+}
+
+data "kubernetes_config_map" "aws_auth" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+
+  depends_on = [
+    module.eks,                 # cluster must exist
+    module.eks.fargate_profiles 
+  ]
+}
+
+locals {
+  existing_map_roles = (
+    try(yamldecode(data.kubernetes_config_map.aws_auth.data["mapRoles"]), [])
+  )
+  lambda_map_role = {
+    rolearn  = module.cloudfront_secret_rotation_lambda_role.arn
+    username = module.cloudfront_secret_rotation_lambda_role.arn
+    groups   = ["lambda-ingress-patcher"]
+  }
+  merged_map_roles = distinct(
+    concat(local.existing_map_roles, [local.lambda_map_role])
+  )
+}
+
+resource "kubernetes_config_map" "aws_auth_merged" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+
+  data = {
+    mapRoles = yamlencode(local.merged_map_roles)
+  }
+
+  depends_on = [
+    module.eks,
+    module.eks.fargate_profiles
+  ]
 }
 
 # Service account for me_website application
@@ -170,28 +220,27 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
       name      = "me_website-app-ingress"
       namespace = "me_website-app"
       annotations = {
-        "kubernetes.io/ingress.class"                    = "alb"
-        "alb.ingress.kubernetes.io/scheme"               = "internal"
-        "alb.ingress.kubernetes.io/load-balancer-name"        = "k8s-me-website-app-alb"
+        "kubernetes.io/ingress.class" = "alb"
+        "alb.ingress.kubernetes.io/scheme" = "internal"
+        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
         "alb.ingress.kubernetes.io/security-groups" = join(",", [
           data.terraform_remote_state.eks.outputs.cluster_primary_security_group_id,
           data.terraform_remote_state.eks.outputs.cloudfront_alb_security_group_id
         ])
-        "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ "HTTPS" = 443 }])
+        "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTPS" = 443 }])
+        "alb.ingress.kubernetes.io/conditions.secure-rule" = ""
       }
     }
     spec = {
       rules = [{
         http = {
           paths = [{
-            path      = "/"
-            pathType  = "Prefix"
+            path     = "/"
+            pathType = "Prefix"
             backend = {
               service = {
                 name = "me_website-app-service"
-                port = {
-                  number = 8000
-                }
+                port = { number = 8000 }
               }
             }
           }]
@@ -199,8 +248,13 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
       }]
     }
   }
-}
 
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["alb.ingress.kubernetes.io/conditions.secure-rule"]
+    ]
+  }
+}
 
 data "archive_file" "lambda_my_function" {
   type             = "zip"
