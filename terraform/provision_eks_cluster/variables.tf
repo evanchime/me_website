@@ -10,7 +10,7 @@ variable "region" {
 variable "me_website_image" {
   description = "me_website container image"
   type        = string
-  default     = "661510969671.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
+  default     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
 }
 
 variable "existing_rds_instance_name" {
