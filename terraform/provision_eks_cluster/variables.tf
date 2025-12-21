@@ -30,17 +30,6 @@ variable "existing_rds_security_group_id" {
     type        = string
 }
 
-variable "health_check_secret_value_wo" {
-  description = "The secret value for the X-Health-Check-Secret header."
-  type        = string
-  sensitive   = true
-}
-
-variable "cloudfront_distribution_id" {
-  description = "cloudfront_distribution_id"
-  type        = string
-}
-
 variable "domain_name" {
   description = "The domain name for the website"
   type        = string
