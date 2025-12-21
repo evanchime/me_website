@@ -156,7 +156,7 @@ resource "kubernetes_manifest" "lambda_ingress_patcher_rolebinding" {
     }
     subjects = [{
       kind = "User"
-      name = module.secret_rotation_lambda_irsa_role.iam_role_arn
+      name = module.cloudfront_secret_rotation_lambda_role.arn
       apiGroup = "rbac.authorization.k8s.io"
     }]
   }
