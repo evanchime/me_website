@@ -6,8 +6,8 @@ terraform {
   cloud {
     organization = "DevOps_As_A_Way"
     workspaces {
-      project = "learn-terraform"
-      name = "learn-terraform-eks"
+      project = "k8s-migration"
+      name = "provision-eks-cluster"
     }
   }
 
@@ -17,23 +17,9 @@ terraform {
       version = "~> 5.47.0"
     }
 
-    kubernetes = {
-      source = "hashicorp/kubernetes"
-    }
-
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6.1"
-    }
-
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0.5"
-    }
-
-    cloudinit = {
-      source  = "hashicorp/cloudinit"
-      version = "~> 2.3.4"
     }
   }
 
