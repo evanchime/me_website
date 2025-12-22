@@ -42,6 +42,7 @@ module "vpc" {
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = 1
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
+    "kubernetes.io/role/pod-eni" = "1"
   }
 
   tags = local.tags
@@ -220,6 +221,44 @@ module "me_website_irsa_role" {
   tags = local.tags
 }
 
+module "rds_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${local.cluster_name}-rds-sg"
+  description = "Security group for the RDS instance"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_with_source_security_group_id = [
+    {
+      rule                     = "postgresql-tcp"
+      source_security_group_id = module.fargate_app_sg.id
+      description              = "Allow app pods on Fargate to access RDS PostgreSQL"
+    }
+  ]
+
+  tags = local.tags
+}
+
+module "fargate_app_sg" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${local.cluster_name}-fargate-app-sg"
+  description = "Security group for app pods on Fargate"
+  vpc_id      = module.vpc.vpc_id
+
+  egress_with_cidr_blocks = [
+    {
+      rule        = "all-all"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "Allow all outbound traffic"
+    }
+  ]
+
+  tags = local.tags
+}
+
 module "alb_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
@@ -274,11 +313,6 @@ module "eks_primary_security_group" {
         description = "me_website to AWS services & internet"
     },
     {
-        rule        = "postgresql-tcp"
-        cidr_blocks = module.vpc.vpc_cidr_block
-        description = "me_website to RDS PostgreSQL"
-    },
-    {
         rule        = "dns-udp"
         cidr_blocks = module.vpc.vpc_cidr_block
         description = "DNS resolution"
@@ -290,6 +324,13 @@ module "eks_primary_security_group" {
 
     }
   ] 
+
+  tags = local.tags
+}
+
+resource "aws_db_subnet_group" "me_website_rds" {
+  name       = "me_website-rds"
+  subnet_ids = module.vpc.private_subnets
 
   tags = local.tags
 }
