@@ -138,7 +138,7 @@ resource "kubernetes_namespace" "me_website_app" {
 
 resource "kubernetes_persistent_volume" "efs_pv" {
   metadata {
-      name = "me-website-efs-pv"
+      name = "me_website-efs-pv"
   }
   spec {
     capacity = {
@@ -222,7 +222,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
       annotations = {
         "kubernetes.io/ingress.class" = "alb"
         "alb.ingress.kubernetes.io/scheme" = "internal"
-        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
+        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me_website-app-alb"
         "alb.ingress.kubernetes.io/security-groups" = join(",", [
           data.terraform_remote_state.eks.outputs.cluster_primary_security_group_id,
           data.terraform_remote_state.eks.outputs.cloudfront_alb_security_group_id
@@ -253,6 +253,27 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
     ignore_changes = [
       metadata[0].annotations["alb.ingress.kubernetes.io/conditions.secure-rule"]
     ]
+  }
+}
+
+resource "kubernetes_manifest" "fargate_sg_policy" {
+  manifest = {
+    apiVersion = "vpcresources.k8s.aws/v1beta1"
+    kind       = "SecurityGroupPolicy"
+    metadata = {
+      name      = "me_website-sg-policy"
+      namespace = "me_website-app"
+    }
+    spec = {
+      podSelector = {
+        matchLabels = {
+          app = "me_website"
+        }
+      }
+      securityGroups = {
+        groupIds = [data.terraform_remote_state.eks.outputs.fargate_app_sg_id]
+      }
+    }
   }
 }
 
