@@ -335,6 +335,20 @@ resource "aws_db_subnet_group" "me_website_rds" {
   tags = local.tags
 }
 
+resource "aws_db_instance" "me_website_k8s_db" {
+  identifier             = "me-webiste-database-instance-k8s"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  engine                 = "postgres"
+  engine_version         = "17.4"
+  username               = "me_website_k8s_admin"
+  password               = var.db_password
+  db_subnet_group_name   = aws_db_subnet_group.me_website_rds.name
+  vpc_security_group_ids = [module.rds_security_group.id]
+  parameter_group_name   = aws_db_parameter_group.education.name
+  skip_final_snapshot    = true
+}
+
 # IAM policy for me_website application
 resource "aws_iam_policy" "me_website_app" {
   name        = "${local.cluster_name}-me_website-app-policy"
