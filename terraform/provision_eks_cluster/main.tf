@@ -240,6 +240,11 @@ module "rds_security_group" {
       rule                     = "postgresql-tcp"
       source_security_group_id = module.fargate_app_sg.id
       description              = "Allow app pods on Fargate to access RDS PostgreSQL"
+    },
+    {
+      rule                     = "postgresql-tcp"
+      source_security_group_id = module.rds_lambda_security_group.security_group_id
+      description              = "Allow Lambda to access RDS PostgreSQL"
     }
   ]
 
@@ -350,7 +355,7 @@ resource "aws_db_instance" "me_website_k8s_db" {
   engine                      = "postgres"
   engine_version              = "17.4"
   username                    = "me_website_k8s_admin"
-  password                    = ephemeral.random_password.db_password.result
+  password_wo                 = ephemeral.random_password.db_password.result
   password_wo_version         = local.db_password_version
   allow_major_version_upgrade = true
   db_subnet_group_name        = aws_db_subnet_group.me_website_rds.name
@@ -379,14 +384,6 @@ ephemeral "random_password" "db_password" {
   special = false
 }
 
-resource "aws_ssm_parameter" "rds_secret" {
-  name             = "/me_website_k8s/database/password/master"
-  description      = "Password for RDS database."
-  type             = "SecureString"
-  value_wo         = ephemeral.random_password.db_password.result
-  value_wo_version = local.db_password_version
-}
-
 # IAM policy for me_website application
 resource "aws_iam_policy" "me_website_app" {
   name        = "${local.cluster_name}-me_website-app-policy"
@@ -396,36 +393,9 @@ resource "aws_iam_policy" "me_website_app" {
   tags = local.tags
 }
 
-resource "aws_vpc_peering_connection" "eks_rds" {
-    peer_vpc_id = data.aws_vpc.rds_vpc.id
-    vpc_id = module.vpc.vpc_id
-    auto_accept = true
-    tags = {
-        Name = "${local.cluster_name}-to-rds"
-    }
-
-}
-
-# Add route to RDS VPC in EKS route tables
-resource "aws_route" "eks_to_rds" {
-
-    for_each = toset(module.vpc.private_route_table_ids)
-    route_table_id = each.value
-    destination_cidr_block = data.aws_vpc.rds_vpc.cidr_block
-    vpc_peering_connection_id = aws_vpc_peering_connection.eks_rds.id
-}
-
-# Add route to EKS VPC in RDS route tables
-resource "aws_route" "rds_to_eks" {
-    for_each = toset(data.aws_route_tables.rds_vpc_route_tables.ids)
-    route_table_id = each.value
-    destination_cidr_block = module.vpc.vpc_cidr_block
-    vpc_peering_connection_id = aws_vpc_peering_connection.eks_rds.id
-}
-
 resource "aws_secretsmanager_secret" "rds_master_credentials" {
-  name           = "rds-master-credentials/me-website"
-  description    = "Master credentials for the me-website RDS PostgreSQL instance"
+  name           = "rds-master-credentials/me-website-k8s"
+  description    = "Master credentials for the me-website-k8s RDS PostgreSQL instance"
 }
 
 resource "aws_secretsmanager_secret_rotation" "rds_master_rotation" {
@@ -448,7 +418,7 @@ resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
     engine   = data.aws_db_instance.existing_rds.engine  
     host     = data.aws_db_instance.existing_rds.address
     username = data.aws_db_instance.existing_rds.master_username 
-    password = var.database_master_password          
+    password = ephemeral.random_password.db_password.result         
     port     = data.aws_db_instance.existing_rds.port    
   })
 
@@ -512,11 +482,11 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
   depends_on = [
     terraform_data.rds_lambda_install_dependencies,
     aws_iam_role_policy_attachment.lambda_basic_execution,
-    aws_security_group.lambda_rds_sg
+    module.rds_lambda_security_group
   ]
   vpc_config {
-    subnet_ids         = data.aws_db_subnet_group.existing_rds.subnet_ids
-    security_group_ids = [aws_security_group.lambda_rds_sg.id]
+    subnet_ids         = module.vpc.private_subnets
+    security_group_ids = [module.rds_lambda_security_group.security_group_id]
   }
 
 }
@@ -528,37 +498,29 @@ resource "aws_lambda_permission" "rds_allow_secret_manager" {
   principal     = "secretsmanager.amazonaws.com"
 }
 
-resource "aws_security_group" "lambda_rds_sg" {
-  name        = "lambda-rds-access"
-  description = "Allow Lambda to access RDS"
-  vpc_id      = data.aws_vpc.rds_vpc.id
-  tags = {
-    Name = "lambda-rds-sg"
-  }
-}
+module "rds_lambda_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
 
-resource "aws_vpc_security_group_egress_rule" "allow_postgreql_port" {
-  security_group_id = aws_security_group.lambda_rds_sg.id
-  cidr_ipv4         = data.aws_vpc.rds_vpc.cidr_block
-  from_port         = 5432
-  to_port           = 5432
-  ip_protocol       = "tcp"
-}
+  name        = "${local.cluster_name}-lambda-rds-sg"
+  description = "Security group for the RDS instance"
+  vpc_id      = module.vpc.vpc_id
 
-resource "aws_vpc_security_group_egress_rule" "allow_https_for_secretsmanager" {
-  security_group_id = aws_security_group.lambda_rds_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
-}
+  egress_with_source_security_group_id = [
+    {
+        rule                     = "postgresql-tcp"
+        source_security_group_id = module.rds_security_group.security_group_id
+        description              = "Allow Lambda to access RDS PostgreSQL"
+    }
+  ]
 
-resource "aws_vpc_security_group_ingress_rule" "allow_lambda_to_rds" {
-  security_group_id = data.aws_security_group.existing_rds.id
-  description = "Allow Lambda to access RDS"
-  ip_protocol       = "tcp"
-  referenced_security_group_id = aws_security_group.lambda_rds_sg.id
-  from_port         = 5432
-  to_port           = 5432
-}
+  egress_with_cidr_blocks = [
+    {
+        rule        = "https-443-tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+        description = "Allow Lambda to access Secrets Manager"
+    }
+  ]
 
+  tags = local.tags
+}

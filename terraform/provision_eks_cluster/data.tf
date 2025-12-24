@@ -11,26 +11,6 @@ data "aws_route53_zone" "iplayishow" {
   name = "${trimsuffix(var.domain_name, ".")}."
 }
 
-data "aws_db_instance" "existing_rds" {
-    db_instance_identifier = var.existing_rds_instance_name
-}
-
-data "aws_db_subnet_group" "existing_rds" {
-    name = data.aws_db_instance.existing_rds.db_subnet_group
-}
-
-data "aws_security_group" "existing_rds" {
-  id = var.existing_rds_security_group_id
-}
-
-data "aws_vpc" "rds_vpc" {
-    id = data.aws_db_subnet_group.existing_rds.vpc_id
-}
-
-data "aws_route_tables" "rds_vpc_route_tables" {
-    vpc_id = data.aws_vpc.rds_vpc.id
-}
-
 # IAM role for me_website application (for accessing RDS, S3, etc.)
 data "aws_iam_policy_document" "me_website_app" {
   statement {
@@ -66,7 +46,7 @@ data "aws_iam_policy_document" "me_website_app" {
       "rds-db:connect"
     ]
     resources = [
-      "arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.existing_rds.resource_id}/${data.aws_db_instance.existing_rds.master_username}"
+      "arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.me_website_k8s_db.resource_id}/${aws_db_instance.me_website_k8s_db.username}"
     ]
   }
 }
@@ -132,7 +112,7 @@ data "aws_iam_policy_document" "lambda_permissions_policy" {
     "rds:DescribeDBInstances",
     "rds:ModifyDBInstance",
     ]
-    resources = [data.aws_db_instance.existing_rds.arn]
+    resources = [aws_db_instance.me_website_k8s_db.arn]
   }
 }
 
