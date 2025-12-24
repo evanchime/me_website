@@ -7,6 +7,7 @@ provider "aws" {
 
 locals {
   cluster_name = "me_website-eks-${random_string.suffix.result}"
+  db_password_version = 1
   tags = {
     Project     = "k8s-migration"
     Environment = "production"
@@ -16,6 +17,11 @@ locals {
 
 resource "random_string" "suffix" {
   length  = 8
+  special = false
+}
+
+resource "random_string" "prefix" {
+  length  = 2
   special = false
 }
 
@@ -328,6 +334,7 @@ module "eks_primary_security_group" {
   tags = local.tags
 }
 
+# RDS instance configuration starts here
 resource "aws_db_subnet_group" "me_website_rds" {
   name       = "me_website-rds"
   subnet_ids = module.vpc.private_subnets
@@ -336,17 +343,48 @@ resource "aws_db_subnet_group" "me_website_rds" {
 }
 
 resource "aws_db_instance" "me_website_k8s_db" {
-  identifier             = "me-webiste-database-instance-k8s"
-  instance_class         = "db.t3.micro"
-  allocated_storage      = 20
-  engine                 = "postgres"
-  engine_version         = "17.4"
-  username               = "me_website_k8s_admin"
-  password               = var.db_password
-  db_subnet_group_name   = aws_db_subnet_group.me_website_rds.name
-  vpc_security_group_ids = [module.rds_security_group.id]
-  parameter_group_name   = aws_db_parameter_group.education.name
-  skip_final_snapshot    = true
+  identifier                  = "me-webiste-database-instance-k8s"
+  instance_class              = "db.t3.micro"
+  allocated_storage           = 20
+  apply_immediately           = true
+  engine                      = "postgres"
+  engine_version              = "17.4"
+  username                    = "me_website_k8s_admin"
+  password                    = ephemeral.random_password.db_password.result
+  password_wo_version         = local.db_password_version
+  allow_major_version_upgrade = true
+  db_subnet_group_name        = aws_db_subnet_group.me_website_rds.name
+  vpc_security_group_ids      = [module.rds_security_group.id]
+  parameter_group_name        = aws_db_parameter_group.me_website_k8s_rds_parameters.name
+  skip_final_snapshot         = true
+  backup_retention_period     = 1
+}
+
+resource "aws_db_parameter_group" "me_website_k8s_rds_parameters" {
+  name_prefix =   "${random_string.prefix.id}-me_website_k8s_rds_parameters"
+  family = "postgres17"
+
+  parameter {
+    name  = "log_connections"
+    value = "1"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+ephemeral "random_password" "db_password" {
+  length  = 16
+  special = false
+}
+
+resource "aws_ssm_parameter" "rds_secret" {
+  name             = "/me_website_k8s/database/password/master"
+  description      = "Password for RDS database."
+  type             = "SecureString"
+  value_wo         = ephemeral.random_password.db_password.result
+  value_wo_version = local.db_password_version
 }
 
 # IAM policy for me_website application
