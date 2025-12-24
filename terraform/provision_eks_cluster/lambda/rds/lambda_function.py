@@ -58,7 +58,8 @@ def lambda_handler(event, context):
 
     # Setup the client
     service_client = boto3.client(
-        'secretsmanager', endpoint_url=os.environ['SECRETS_MANAGER_ENDPOINT']
+        'secretsmanager', 
+        endpoint_url=os.environ.get('SECRETS_MANAGER_ENDPOINT')
     )
 
     # Make sure the version is staged correctly
