@@ -1,13 +1,17 @@
-# Copyright (c) HashiCorp, Inc.
-# SPDX-License-Identifier: MPL-2.0
+###############################################
+# PROVIDER & GLOBAL CONFIGURATION
+###############################################
 
 provider "aws" {
   region = var.region
 }
 
 locals {
-  cluster_name = "me_website-eks-${random_string.suffix.result}"
+  # Unique cluster name with random suffix
+  cluster_name        = "me_website-eks-${random_string.suffix.result}"
   db_password_version = 1
+
+  # Common tags applied to all resources
   tags = {
     Project     = "k8s-migration"
     Environment = "production"
@@ -15,6 +19,7 @@ locals {
   }
 }
 
+# Random strings for naming
 resource "random_string" "suffix" {
   length  = 8
   special = false
@@ -25,14 +30,35 @@ resource "random_string" "prefix" {
   special = false
 }
 
+###############################################
+# DATA SOURCES
+###############################################
+
+data "aws_caller_identity" "current" {}
+
+data "aws_availability_zones" "available" {
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
+
+data "aws_route53_zone" "iplayishow" {
+  name = "${trimsuffix(var.domain_name, ".")}."
+}
+
+#######################################################
+# VPC — Networking foundation for EKS, Lambda, and RDS
+#######################################################
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.8.1"
 
   name = "me_website-vpc"
   cidr = "10.0.0.0/16"
-  
-  azs  = slice(data.aws_availability_zones.available.names, 0, 3)
+
+  azs = slice(data.aws_availability_zones.available.names, 0, 3)
 
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   public_subnets  = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
@@ -41,10 +67,12 @@ module "vpc" {
   single_nat_gateway   = true
   enable_dns_hostnames = true
 
+  # Required for EKS load balancers
   public_subnet_tags = {
     "kubernetes.io/role/elb" = 1
   }
 
+  # Required for EKS Fargate + VPC CNI
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = 1
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
@@ -53,6 +81,10 @@ module "vpc" {
 
   tags = local.tags
 }
+
+###############################################
+# EKS CLUSTER (Control plane + Fargate profiles)
+###############################################
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -64,28 +96,22 @@ module "eks" {
   cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
 
+  # Core EKS addons
   cluster_addons = {
-    coredns = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
+    coredns   = { most_recent = true }
+    kube-proxy = { most_recent = true }
+    vpc-cni   = { most_recent = true }
   }
 
+  # Grant admin access to your SSO role
   access_entries = {
     Evan_Admin = {
-      principal_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-reserved/sso.amazonaws.com/eu-west-2/AWSReservedSSO_AdministratorAccess_95a4a8e95b834fbe"
+      principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-reserved/sso.amazonaws.com/eu-west-2/AWSReservedSSO_AdministratorAccess_95a4a8e95b834fbe"
 
       policy_associations = {
         cluster = {
           policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
+          access_scope = { type = "cluster" }
         }
       }
     }
@@ -94,39 +120,32 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  fargate_profiles = {
-    # System namespaces (required)
-    system = {
-      name = "fp-system"
-      subnet_ids = module.vpc.private_subnets
+  ###########################################################
+  # Fargate profiles — system namespaces + me_website app
+  ###########################################################
 
+  fargate_profiles = {
+    system = {
+      name       = "fp-system"
+      subnet_ids = module.vpc.private_subnets
       selectors = [
-        {
-          namespace = "kube-system"
-        },
-        {
-          namespace = "default"
-        }
+        { namespace = "kube-system" },
+        { namespace = "default" }
       ]
     }
 
-    # me_website application namespace
     me_website = {
-      name = "fp-me_website"
+      name       = "fp-me_website"
       subnet_ids = module.vpc.private_subnets
 
       selectors = [
-        {
-          namespace = "me_website-app"
-        }
+        { namespace = "me_website-app" }
       ]
 
-      # IAM configuration for me_website pods
-      create_iam_role = true
-      iam_role_name   = "${local.cluster_name}-fargate-me_website"
-      iam_role_attach_cni_policy = true
-      
-      # Add permissions for CloudWatch, Secrets Manager, etc.
+      # IRSA role for app pods
+      create_iam_role               = true
+      iam_role_name                 = "${local.cluster_name}-fargate-me_website"
+      iam_role_attach_cni_policy    = true
       iam_role_additional_policies = {
         CloudWatchLogsFull = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
         SecretsManagerRead = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
@@ -137,45 +156,58 @@ module "eks" {
   tags = local.tags
 }
 
+###############################################################
+# EKS ADDONS (ALB Controller, ExternalDNS, CSI Driver, etc.)
+###############################################################
+
 module "eks_blueprints_addons" {
-  source = "aws-ia/eks-blueprints-addons/aws"
+  source  = "aws-ia/eks-blueprints-addons/aws"
   version = "= 1.22.0"
+
   cluster_name      = module.eks.cluster_name
   cluster_endpoint  = module.eks.cluster_endpoint
   cluster_version   = module.eks.cluster_version
   oidc_provider_arn = module.eks.oidc_provider_arn
 
-  enable_aws_load_balancer_controller            = true
-  enable_cluster_proportional_autoscaler         = true
-  enable_metrics_server                          = true
-  enable_external_dns                            = true
-  enable_cert_manager                            = true
-  enable_secrets_store_csi_driver                = true
-  enable_secrets_store_csi_driver_provider_aws   = true
+  enable_aws_load_balancer_controller          = true
+  enable_cluster_proportional_autoscaler       = true
+  enable_metrics_server                        = true
+  enable_external_dns                          = true
+  enable_cert_manager                          = true
+  enable_secrets_store_csi_driver              = true
+  enable_secrets_store_csi_driver_provider_aws = true
 
-  cert_manager_route53_hosted_zone_arns          = [data.aws_route53_zone.iplayishow.arn]
+  cert_manager_route53_hosted_zone_arns = [
+    data.aws_route53_zone.iplayishow.arn
+  ]
 
   tags = local.tags
 
-  depends_on = [ module.eks ]
+  depends_on = [module.eks]
 }
 
-# EFS for any persistent storage needs (media files, etc.)
+###############################################
+# EFS — Persistent storage for media files
+###############################################
+
 module "efs" {
   source  = "terraform-aws-modules/efs/aws"
   version = "~> 1.0"
-  
-  name = "${local.cluster_name}-efs"
+
+  name           = "${local.cluster_name}-efs"
   creation_token = "${local.cluster_name}-efs-token"
-  
-  # Mount targets / Security group for EFS - allow NFS from EKS cluster
+
+  # One mount target per private subnet
   mount_targets = {
     for subnet in module.vpc.private_subnets : subnet => {
       subnet_id = subnet
     }
   }
+
   security_group_description = "EFS for me_website EKS cluster"
   security_group_vpc_id      = module.vpc.vpc_id
+
+  # Allow NFS from EKS cluster SG
   security_group_rules = {
     eks_cluster = {
       description              = "NFS from EKS cluster"
@@ -186,18 +218,15 @@ module "efs" {
     }
   }
 
-  # Access point for me_website media files
+  # Access point for app media
   access_points = {
     me_website-filesystem = {
-      posix_user = {
-        gid = 1000
-        uid = 1000
-      }
+      posix_user = { uid = 1000, gid = 1000 }
       root_directory = {
         path = "/me_website-filesystem"
         creation_info = {
-          owner_gid   = 1000
           owner_uid   = 1000
+          owner_gid   = 1000
           permissions = "755"
         }
       }
@@ -207,26 +236,59 @@ module "efs" {
   tags = local.tags
 }
 
-module "me_website_irsa_role" {
-  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "6.2.3"
+###############################################################
+# SECURITY GROUPS — ALB, Fargate, RDS, Lambda, EKS Primary
+###############################################################
 
-  name = "${local.cluster_name}-me_website-app"
+# SG for Fargate app pods
+module "fargate_app_sg" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
 
-   policies = {
-    me_website_app = aws_iam_policy.me_website_app.arn
-  }
+  name        = "${local.cluster_name}-fargate-app-sg"
+  description = "Security group for app pods on Fargate"
+  vpc_id      = module.vpc.vpc_id
 
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["me_website-app:me_website-service-account"]
+  egress_with_cidr_blocks = [
+    {
+      rule        = "all-all"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "Allow all outbound traffic"
     }
-  }
+  ]
 
   tags = local.tags
 }
 
+# SG for ALB (internal)
+module "alb_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${local.cluster_name}-alb-sg"
+  description = "Security group for internal ALB with CloudFront VPC Origin"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_with_cidr_blocks = [
+    {
+      rule        = "https-443-tcp"
+      cidr_blocks = module.vpc.vpc_cidr_block
+      description = "CloudFront VPC Origin ENIs to ALB"
+    }
+  ]
+
+  egress_with_cidr_blocks = [
+    {
+      rule        = "http-80-tcp"
+      cidr_blocks = module.vpc.vpc_cidr_block
+      description = "ALB to EKS pods"
+    }
+  ]
+
+  tags = local.tags
+}
+
+# SG for RDS instance
 module "rds_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
@@ -251,100 +313,72 @@ module "rds_security_group" {
   tags = local.tags
 }
 
-module "fargate_app_sg" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
-
-  name        = "${local.cluster_name}-fargate-app-sg"
-  description = "Security group for app pods on Fargate"
-  vpc_id      = module.vpc.vpc_id
-
-  egress_with_cidr_blocks = [
-    {
-      rule        = "all-all"
-      cidr_blocks = ["0.0.0.0/0"]
-      description = "Allow all outbound traffic"
-    }
-  ]
-
-  tags = local.tags
-}
-
-module "alb_security_group" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
-
-  name        = "${local.cluster_name}-alb-sg"
-  description = "Security group for internal ALB with CloudFront VPC Origin"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress_with_cidr_blocks = [
-    {
-        rule        = "https-443-tcp"
-        cidr_blocks = module.vpc.vpc_cidr_block
-        description = "CloudFront VPC Origin ENIs to ALB"
-    }
-  ]
-
-  egress_with_cidr_blocks = [
-    {
-        rule        = "http-80-tcp"
-        cidr_blocks = module.vpc.vpc_cidr_block
-        description = "ALB to EKS pods"
-    }
-  ]
-  tags = local.tags
-}
-
+# SG for EKS primary cluster SG (patching inbound rules)
 module "eks_primary_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
-  name        = "${local.cluster_name}-primary-sg"
-  description = "EKS cluster security group"
-  vpc_id      = module.vpc.vpc_id
-  security_group_id = module.eks.cluster_primary_security_group_id
+
+  name               = "${local.cluster_name}-primary-sg"
+  description        = "EKS cluster security group"
+  vpc_id             = module.vpc.vpc_id
+  security_group_id  = module.eks.cluster_primary_security_group_id
 
   ingress_with_source_security_group_id = [
     {
-        rule                     = "http-80-tcp"
-        source_security_group_id = module.alb_security_group.security_group_id
-        description              = "From ALB to me_website pods"
+      rule                     = "http-80-tcp"
+      source_security_group_id = module.alb_security_group.security_group_id
+      description              = "From ALB to me_website pods"
     },
     {
-        rule                     = "all-all"  # Allow internal EKS communication
-        source_security_group_id = module.eks.cluster_primary_security_group_id
-        description = "Internal EKS cluster communication"
+      rule                     = "all-all"
+      source_security_group_id = module.eks.cluster_primary_security_group_id
+      description              = "Internal EKS cluster communication"
     }
   ]
-    
+
   egress_with_cidr_blocks = [
     {
-        rule        = "https-443-tcp"
-        cidr_blocks = "0.0.0.0/0"
-        description = "me_website to AWS services & internet"
+      rule        = "https-443-tcp"
+      cidr_blocks = "0.0.0.0/0"
+      description = "me_website to AWS services & internet"
     },
     {
-        rule        = "dns-udp"
-        cidr_blocks = module.vpc.vpc_cidr_block
-        description = "DNS resolution"
+      rule        = "dns-udp"
+      cidr_blocks = module.vpc.vpc_cidr_block
+      description = "DNS resolution"
     },
     {
-        rule        = "dns-tcp"
-        cidr_blocks = module.vpc.vpc_cidr_block
-        description = "DNS resolution"
-
+      rule        = "dns-tcp"
+      cidr_blocks = module.vpc.vpc_cidr_block
+      description = "DNS resolution"
     }
-  ] 
+  ]
 
   tags = local.tags
 }
 
-# RDS instance configuration starts here
+###############################################################
+# RDS — Subnet group, parameter group, instance
+###############################################################
+
 resource "aws_db_subnet_group" "me_website_rds" {
   name       = "me_website-rds"
   subnet_ids = module.vpc.private_subnets
+  tags       = local.tags
+}
 
-  tags = local.tags
+resource "aws_db_parameter_group" "me_website_k8s_rds_parameters" {
+  name_prefix = "${random_string.prefix.id}-me_website_k8s_rds_parameters"
+  family      = "postgres17"
+
+  parameter {
+    name  = "log_connections"
+    value = "1"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_db_instance" "me_website_k8s_db" {
@@ -358,25 +392,13 @@ resource "aws_db_instance" "me_website_k8s_db" {
   password_wo                 = ephemeral.random_password.db_password.result
   password_wo_version         = local.db_password_version
   allow_major_version_upgrade = true
-  db_subnet_group_name        = aws_db_subnet_group.me_website_rds.name
-  vpc_security_group_ids      = [module.rds_security_group.id]
-  parameter_group_name        = aws_db_parameter_group.me_website_k8s_rds_parameters.name
-  skip_final_snapshot         = true
-  backup_retention_period     = 1
-}
 
-resource "aws_db_parameter_group" "me_website_k8s_rds_parameters" {
-  name_prefix =   "${random_string.prefix.id}-me_website_k8s_rds_parameters"
-  family = "postgres17"
+  db_subnet_group_name   = aws_db_subnet_group.me_website_rds.name
+  vpc_security_group_ids = [module.rds_security_group.id]
+  parameter_group_name   = aws_db_parameter_group.me_website_k8s_rds_parameters.name
 
-  parameter {
-    name  = "log_connections"
-    value = "1"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  skip_final_snapshot     = true
+  backup_retention_period = 1
 }
 
 ephemeral "random_password" "db_password" {
@@ -384,18 +406,29 @@ ephemeral "random_password" "db_password" {
   special = false
 }
 
-# IAM policy for me_website application
-resource "aws_iam_policy" "me_website_app" {
-  name        = "${local.cluster_name}-me_website-app-policy"
-  description = "Policy for me_website application"
-  policy      = data.aws_iam_policy_document.me_website_app.json
-
-  tags = local.tags
-}
+###############################################################
+# SECRETS MANAGER — RDS master credentials + rotation
+###############################################################
 
 resource "aws_secretsmanager_secret" "rds_master_credentials" {
-  name           = "rds-master-credentials/me-website-k8s"
-  description    = "Master credentials for the me-website-k8s RDS PostgreSQL instance"
+  name        = "rds-master-credentials/me-website-k8s"
+  description = "Master credentials for the me-website-k8s RDS PostgreSQL instance"
+}
+
+resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
+  secret_id = aws_secretsmanager_secret.rds_master_credentials.id
+
+  secret_string = jsonencode({
+    engine   = data.aws_db_instance.existing_rds.engine
+    host     = data.aws_db_instance.existing_rds.address
+    username = data.aws_db_instance.existing_rds.master_username
+    password = ephemeral.random_password.db_password.result
+    port     = data.aws_db_instance.existing_rds.port
+  })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "aws_secretsmanager_secret_rotation" "rds_master_rotation" {
@@ -411,25 +444,154 @@ resource "aws_secretsmanager_secret_rotation" "rds_master_rotation" {
   ]
 }
 
-resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
-  secret_id = aws_secretsmanager_secret.rds_master_credentials.id
+###############################################################
+# IAM — IRSA role for me_website app
+###############################################################
 
-  secret_string = jsonencode({
-    engine   = data.aws_db_instance.existing_rds.engine  
-    host     = data.aws_db_instance.existing_rds.address
-    username = data.aws_db_instance.existing_rds.master_username 
-    password = ephemeral.random_password.db_password.result         
-    port     = data.aws_db_instance.existing_rds.port    
-  })
+module "me_website_irsa_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "6.2.3"
 
-  # This tells Terraform to ignore future changes to this resource.
-  # After the first rotation, AWS will manage the secret versions, not 
-  # Terraform.
-  lifecycle {
-    ignore_changes = [secret_string]
+  name = "${local.cluster_name}-me_website-app"
+
+  policies = {
+    me_website_app = aws_iam_policy.me_website_app.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["me_website-app:me_website-service-account"]
+    }
+  }
+
+  tags = local.tags
+}
+
+# IAM policy document granting the me_website application access to 
+# S3, Secrets Manager, and RDS IAM authentication.
+data "aws_iam_policy_document" "me_website_app" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:ListBucket"
+    ]
+    resources = [
+      "arn:aws:s3:::me-website-bucket",
+      "arn:aws:s3:::me-website-bucket/*",
+      "arn:aws:s3:::me-website-static-error-pages-bucket",
+      "arn:aws:s3:::me-website-static-error-pages-bucket/*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      aws_secretsmanager_secret.rds_master_credentials.arn
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "rds-db:connect"
+    ]
+    resources = [
+      "arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.me_website_k8s_db.resource_id}/${aws_db_instance.me_website_k8s_db.username}"
+    ]
   }
 }
 
+# IAM policy resource attaching the me_website app permissions 
+# (S3, Secrets Manager, RDS IAM auth).
+resource "aws_iam_policy" "me_website_app" {
+  name        = "${local.cluster_name}-me_website-app-policy"
+  description = "Policy for me_website application"
+  policy      = data.aws_iam_policy_document.me_website_app.json
+  tags        = local.tags
+}
+
+###############################################################
+# LAMBDA — RDS password rotation function
+###############################################################
+
+# IAM trust policy document allowing the Lambda service (lambda.amazonaws.com) 
+# to assume the rotation function's IAM role.
+data "aws_iam_policy_document" "lambda_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+# IAM policy document granting the rotation Lambda permissions for 
+# EC2 networking, Secrets Manager operations, and RDS updates.
+data "aws_iam_policy_document" "lambda_permissions_policy" {
+  statement {
+    actions   = ["ec2:Describe*"]
+    effect    = "Allow"
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:UpdateSecretVersionStage",
+    ]
+    resources = [aws_secretsmanager_secret.rds_master_credentials.arn]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetRandomPassword"]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets",
+      "ec2:DetachNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "lambda:SourceFunctionArn"
+      values   = [aws_lambda_function.rds_postgres_rotation.arn]
+    }
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "rds:DescribeDBInstances",
+      "rds:ModifyDBInstance",
+    ]
+    resources = [aws_db_instance.me_website_k8s_db.arn]
+  }
+}
+
+# IAM role and policies for the RDS rotation Lambda function
 resource "aws_iam_role" "rds_secrets_rotation_lambda" {
   name               = "rds_secrets_rotation_lambda"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
@@ -441,11 +603,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
 }
 
 resource "aws_iam_role_policy" "lambda_permissions_policy" {
-  name = "lambda_permissions_policy"
-  role = aws_iam_role.rds_secrets_rotation_lambda.id
-  policy = data.aws_iam_policy_document.lambda_permissions.json
+  name   = "lambda_permissions_policy"
+  role   = aws_iam_role.rds_secrets_rotation_lambda.id
+  policy = data.aws_iam_policy_document.lambda_permissions_policy.json
 }
 
+# Install Python dependencies before zipping Lambda
 resource "terraform_data" "rds_lambda_install_dependencies" {
   triggers_replace = [
     filebase64sha256("${path.module}/lambda/rds/requirements.txt"),
@@ -457,6 +620,46 @@ resource "terraform_data" "rds_lambda_install_dependencies" {
   }
 }
 
+# Package Lambda code
+data "archive_file" "rds_lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/rds"
+  output_path = "${path.module}/lambda/rds/rds_function.zip"
+
+  depends_on = [terraform_data.rds_lambda_install_dependencies]
+}
+
+# Lambda security group
+module "rds_lambda_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${local.cluster_name}-lambda-rds-sg"
+  description = "Security group for the RDS instance"
+  vpc_id      = module.vpc.vpc_id
+
+  # Allow Lambda → RDS
+  egress_with_source_security_group_id = [
+    {
+      rule                     = "postgresql-tcp"
+      source_security_group_id = module.rds_security_group.security_group_id
+      description              = "Allow Lambda to access RDS PostgreSQL"
+    }
+  ]
+
+  # Allow Lambda → Secrets Manager
+  egress_with_cidr_blocks = [
+    {
+      rule        = "https-443-tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "Allow Lambda to access Secrets Manager"
+    }
+  ]
+
+  tags = local.tags
+}
+
+# Lambda function
 resource "aws_lambda_function" "rds_postgres_rotation" {
   filename         = data.archive_file.rds_lambda_zip.output_path
   function_name    = "rds_postgres_rotation_single_user"
@@ -466,61 +669,37 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
   source_code_hash = data.archive_file.rds_lambda_zip.output_base64sha256
   timeout          = 60
 
-  # Environment variables
+  # Environment variables for rotation logic
   environment {
     variables = {
-      DATABASE_TIMEOUT         = "10"
-      EXCLUDE_CHARACTERS       = "/@\"'\\"
-      LOG_LEVEL                = "INFO"
-      ENVIRONMENT              = "production"
-      APPLICATION              = "me_website"
+      DATABASE_TIMEOUT   = "10"
+      EXCLUDE_CHARACTERS = "/@\"'\\"
+      LOG_LEVEL          = "INFO"
+      ENVIRONMENT        = "production"
+      APPLICATION        = "me_website"
     }
   }
 
-  tags = local.tags
-
+  # Ensure dependencies, IAM role, and SG exist before Lambda is created
   depends_on = [
     terraform_data.rds_lambda_install_dependencies,
     aws_iam_role_policy_attachment.lambda_basic_execution,
     module.rds_lambda_security_group
   ]
+
+  # Lambda runs inside the VPC to reach RDS
   vpc_config {
     subnet_ids         = module.vpc.private_subnets
     security_group_ids = [module.rds_lambda_security_group.security_group_id]
   }
 
+  tags = local.tags
 }
 
+# Allow Secrets Manager to invoke the rotation Lambda
 resource "aws_lambda_permission" "rds_allow_secret_manager" {
   statement_id  = "AllowExecutionFromSecretManager"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.rds_postgres_rotation.function_name
   principal     = "secretsmanager.amazonaws.com"
-}
-
-module "rds_lambda_security_group" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
-
-  name        = "${local.cluster_name}-lambda-rds-sg"
-  description = "Security group for the RDS instance"
-  vpc_id      = module.vpc.vpc_id
-
-  egress_with_source_security_group_id = [
-    {
-        rule                     = "postgresql-tcp"
-        source_security_group_id = module.rds_security_group.security_group_id
-        description              = "Allow Lambda to access RDS PostgreSQL"
-    }
-  ]
-
-  egress_with_cidr_blocks = [
-    {
-        rule        = "https-443-tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-        description = "Allow Lambda to access Secrets Manager"
-    }
-  ]
-
-  tags = local.tags
 }
