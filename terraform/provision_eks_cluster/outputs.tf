@@ -52,11 +52,6 @@ output "cluster_certificate_authority_data" {
   sensitive   = true
 }
 
-output "efs_file_system_id" {
-  description = "EFS File System ID"
-  value       = module.efs.id
-}
-
 output "secret_rotation_lambda_role_arn" {
   value = module.secret_rotation_lambda_irsa_role.iam_role_arn
 }

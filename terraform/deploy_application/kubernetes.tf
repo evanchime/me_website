@@ -93,6 +93,7 @@ locals {
   merged_map_roles = distinct(
     concat(local.existing_map_roles, [local.lambda_map_role])
   )
+  me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
 }
 
 resource "kubernetes_config_map" "aws_auth_merged" {
