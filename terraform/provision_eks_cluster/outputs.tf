@@ -57,11 +57,6 @@ output "efs_file_system_id" {
   value       = module.efs.id
 }
 
-output "me_website_namespace" {
-  description = "me_website application namespace"
-  value       = kubernetes_namespace.me_website_app.metadata[0].name
-}
-
 output "secret_rotation_lambda_role_arn" {
   value = module.secret_rotation_lambda_irsa_role.iam_role_arn
 }
@@ -76,9 +71,9 @@ output "vpc_cidr_block" {
   value       = module.vpc.vpc_cidr_block
 }
 
-output "lambda_to_rds_security_group_id" {
+output "rds_lambda_security_group_id" {
   description = "The ID of the security group attached to the RDS secrets rotation Lambda function."
-  value       = aws_security_group.lambda_rds_sg.id
+  value       = module.rds_lambda_security_group.security_group_id
 }
 
 output "efs_access_point_id" {
