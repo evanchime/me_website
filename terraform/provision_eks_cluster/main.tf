@@ -6,9 +6,24 @@ provider "aws" {
   region = var.region
 }
 
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks",
+      "get-token",
+      "--cluster-name",
+      module.eks.cluster_name
+    ]
+  }
+}
+
 locals {
   # Unique cluster name with random suffix
-  cluster_name        = "me_website-eks-${random_string.suffix.result}"
+  cluster_name        = "meweb-eks"
 
   # Common tags applied to all resources
   tags = {
@@ -25,8 +40,10 @@ resource "random_string" "suffix" {
 }
 
 resource "random_string" "prefix" {
-  length  = 2
+  length  = 6
+  upper   = false
   special = false
+  numeric = false
 }
 
 ###############################################
@@ -81,15 +98,52 @@ module "vpc" {
   tags = local.tags
 }
 
-###############################################
-# EKS CLUSTER (Control plane + Fargate profiles)
-###############################################
+#######################################################################################
+# EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + App FARGATE PROFILE
+#######################################################################################
+
+resource "kubernetes_namespace" "me_website_app" {
+  metadata {
+    name = "me-website-app"
+  }
+}
+
+module "fargate_me_website" {
+  source  = "terraform-aws-modules/eks/aws//modules/fargate-profile"
+  version = "~>21.10"
+
+  cluster_name = module.eks.cluster_name
+  name         = "fp-me-website"
+  subnet_ids   = module.vpc.private_subnets
+
+  selectors = [
+    {
+      namespace = kubernetes_namespace.me_website_app.metadata[0].name
+    }
+  ]
+
+  # IRSA role for app pods
+  create_iam_role            = true
+  iam_role_name              = "${local.cluster_name}-fargate-me-website"
+  iam_role_attach_cni_policy = true
+
+  iam_role_additional_policies = {
+    CloudWatchLogsFull = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+    SecretsManagerRead = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+  }
+
+  depends_on = [
+    kubernetes_namespace.me_website_app
+  ]
+}
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.10"
 
   name = local.cluster_name
+
+  endpoint_public_access  = true
 
   enable_cluster_creator_admin_permissions = true
 
@@ -117,9 +171,9 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  ###########################################################
-  # Fargate profiles — system namespaces + me_website app
-  ###########################################################
+  #########################################
+  # Fargate profiles — system namespaces
+  #########################################
 
   fargate_profiles = {
     system = {
@@ -129,24 +183,6 @@ module "eks" {
         { namespace = "kube-system" },
         { namespace = "default" }
       ]
-    }
-
-    me_website = {
-      name       = "fp-me_website"
-      subnet_ids = module.vpc.private_subnets
-
-      selectors = [
-        { namespace = "me_website-app" }
-      ]
-
-      # IRSA role for app pods
-      create_iam_role               = true
-      iam_role_name                 = "${local.cluster_name}-fargate-me_website"
-      iam_role_attach_cni_policy    = true
-      iam_role_additional_policies = {
-        CloudWatchLogsFull = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
-        SecretsManagerRead = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
-      }
     }
   }
 
@@ -196,11 +232,19 @@ module "efs" {
 
   # One mount target per private subnet
   mount_targets = {
-    for subnet in module.vpc.private_subnets : subnet => {
-      subnet_id = subnet
-      security_groups = [module.efs_security_group.security_group_id]
+    ap1 = {
+        subnet_id       = module.vpc.private_subnets[0]
+        security_groups = [module.efs_security_group.security_group_id]
     }
-  }
+    ap2 = {
+        subnet_id       = module.vpc.private_subnets[1]
+        security_groups = [module.efs_security_group.security_group_id]
+    }
+    ap3 = {
+        subnet_id       = module.vpc.private_subnets[2]
+        security_groups = [module.efs_security_group.security_group_id]
+    }
+ }
 
   create_security_group = false
   
@@ -343,25 +387,6 @@ module "eks_primary_security_group" {
   tags = local.tags
 }
 
-module "fargate_app_sg" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.3"
-
-  name        = "${local.cluster_name}-fargate-app-sg"
-  description = "Security group for app pods on Fargate"
-  vpc_id      = module.vpc.vpc_id
-
-  egress_with_cidr_blocks = [
-    {
-      rule        = "all-all"
-      cidr_blocks = "0.0.0.0/0"
-      description = "Allow all outbound traffic"
-    }
-  ]
-
-  tags = local.tags
-}
-
 # SG for EFS filesystem
 module "efs_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
@@ -393,7 +418,7 @@ resource "aws_db_subnet_group" "me_website_rds" {
 }
 
 resource "aws_db_parameter_group" "me_website_k8s_rds_parameters" {
-  name_prefix = "${random_string.prefix.id}-me_website_k8s_rds_parameters"
+  name_prefix = "pg-${random_string.prefix.id}-"
   family      = "postgres17"
 
   parameter {
@@ -685,15 +710,24 @@ module "rds_lambda_security_group" {
   tags = local.tags
 }
 
+resource "aws_lambda_layer_version" "psycopg2" {
+  filename   = "./lambda/rds/layer.zip"
+  layer_name = "psycopg2-layer"
+  compatible_runtimes = ["python3.11"]
+}
+
 # Lambda function
 resource "aws_lambda_function" "rds_postgres_rotation" {
-  filename         = data.archive_file.rds_lambda_zip.output_path
+  filename         = "./lambda/rds/lambda_function.zip"
   function_name    = "rds_postgres_rotation_single_user"
   role             = aws_iam_role.rds_secrets_rotation_lambda.arn
   handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.9"
-  source_code_hash = data.archive_file.rds_lambda_zip.output_base64sha256
+  runtime          = "python3.11"
   timeout          = 60
+
+  layers = [
+    aws_lambda_layer_version.psycopg2.arn
+  ]
 
   # Environment variables for rotation logic
   environment {
