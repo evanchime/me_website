@@ -43,17 +43,13 @@ output "cluster_primary_security_group_id" {
 
 output "fargate_app_sg_id" {
   description = "The fargate app security group ID for pods on Fargate"
-  value       = module.fargate_app_sg.id
+  value       = module.fargate_app_sg.security_group_id
 }
 
 output "cluster_certificate_authority_data" {
   description = "Base64 encoded certificate data required to communicate with the cluster."
   value       = module.eks.cluster_certificate_authority_data
   sensitive   = true
-}
-
-output "secret_rotation_lambda_role_arn" {
-  value = module.secret_rotation_lambda_irsa_role.iam_role_arn
 }
 
 output "oidc_provider_arn" {
@@ -73,12 +69,12 @@ output "rds_lambda_security_group_id" {
 
 output "efs_access_point_id" {
   description = "The ID of the EFS access point created for the me_website application."
-  value       = module.efs.access_points["me_website-filesystem"].access_point_id
+  value       = module.efs.access_points["me_website-filesystem"].id
 }
 
 output "efs_file_system_id" {
   description = "The ID of the EFS file system."
-  value       = module.efs.file_system_id
+  value       = module.efs.id
 }
 
 output "route53_zone_id" {
@@ -88,5 +84,5 @@ output "route53_zone_id" {
 
 output "me_website_irsa_role_arn" {
   description = "The ARN of the IAM role created for the me_website application service account."
-  value       = module.me_website_irsa_role.iam_role_arn
+  value       = module.me_website_irsa_role.arn
 }

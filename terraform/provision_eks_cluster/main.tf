@@ -9,7 +9,6 @@ provider "aws" {
 locals {
   # Unique cluster name with random suffix
   cluster_name        = "me_website-eks-${random_string.suffix.result}"
-  db_password_version = 1
 
   # Common tags applied to all resources
   tags = {
@@ -53,7 +52,7 @@ data "aws_route53_zone" "iplayishow" {
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "5.8.1"
+  version = "6.5"
 
   name = "me_website-vpc"
   cidr = "10.0.0.0/16"
@@ -88,16 +87,14 @@ module "vpc" {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "20.8.5"
+  version = "~> 21.10"
 
-  cluster_name    = local.cluster_name
-  cluster_version = "1.29"
+  name = local.cluster_name
 
-  cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
 
   # Core EKS addons
-  cluster_addons = {
+  addons = {
     coredns   = { most_recent = true }
     kube-proxy = { most_recent = true }
     vpc-cni   = { most_recent = true }
@@ -162,7 +159,7 @@ module "eks" {
 
 module "eks_blueprints_addons" {
   source  = "aws-ia/eks-blueprints-addons/aws"
-  version = "= 1.22.0"
+  version = "~> 1.23"
 
   cluster_name      = module.eks.cluster_name
   cluster_endpoint  = module.eks.cluster_endpoint
@@ -192,7 +189,7 @@ module "eks_blueprints_addons" {
 
 module "efs" {
   source  = "terraform-aws-modules/efs/aws"
-  version = "~> 1.0"
+  version = "~> 2.0"
 
   name           = "${local.cluster_name}-efs"
   creation_token = "${local.cluster_name}-efs-token"
@@ -201,23 +198,12 @@ module "efs" {
   mount_targets = {
     for subnet in module.vpc.private_subnets : subnet => {
       subnet_id = subnet
+      security_groups = [module.efs_security_group.security_group_id]
     }
   }
 
-  security_group_description = "EFS for me_website EKS cluster"
-  security_group_vpc_id      = module.vpc.vpc_id
-
-  # Allow NFS from EKS cluster SG
-  security_group_rules = {
-    eks_cluster = {
-      description              = "NFS from EKS cluster"
-      source_security_group_id = module.eks.cluster_primary_security_group_id
-      from_port                = 2049
-      to_port                  = 2049
-      protocol                 = "tcp"
-    }
-  }
-
+  create_security_group = false
+  
   # Access point for app media
   access_points = {
     me_website-filesystem = {
@@ -237,13 +223,13 @@ module "efs" {
 }
 
 ###############################################################
-# SECURITY GROUPS — ALB, Fargate, RDS, Lambda, EKS Primary
+# SECURITY GROUPS — ALB, Fargate, RDS, Lambda, EKS Primary, EFS
 ###############################################################
 
 # SG for Fargate app pods
 module "fargate_app_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
+  version = "~> 5.3"
 
   name        = "${local.cluster_name}-fargate-app-sg"
   description = "Security group for app pods on Fargate"
@@ -252,7 +238,7 @@ module "fargate_app_sg" {
   egress_with_cidr_blocks = [
     {
       rule        = "all-all"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = "0.0.0.0/0"
       description = "Allow all outbound traffic"
     }
   ]
@@ -263,7 +249,7 @@ module "fargate_app_sg" {
 # SG for ALB (internal)
 module "alb_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
+  version = "~> 5.3"
 
   name        = "${local.cluster_name}-alb-sg"
   description = "Security group for internal ALB with CloudFront VPC Origin"
@@ -291,7 +277,7 @@ module "alb_security_group" {
 # SG for RDS instance
 module "rds_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
+  version = "~> 5.3"
 
   name        = "${local.cluster_name}-rds-sg"
   description = "Security group for the RDS instance"
@@ -300,7 +286,7 @@ module "rds_security_group" {
   ingress_with_source_security_group_id = [
     {
       rule                     = "postgresql-tcp"
-      source_security_group_id = module.fargate_app_sg.id
+      source_security_group_id = module.fargate_app_sg.security_group_id
       description              = "Allow app pods on Fargate to access RDS PostgreSQL"
     },
     {
@@ -316,7 +302,7 @@ module "rds_security_group" {
 # SG for EKS primary cluster SG (patching inbound rules)
 module "eks_primary_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
+  version = "~> 5.3"
 
   name               = "${local.cluster_name}-primary-sg"
   description        = "EKS cluster security group"
@@ -357,6 +343,45 @@ module "eks_primary_security_group" {
   tags = local.tags
 }
 
+module "fargate_app_sg" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.3"
+
+  name        = "${local.cluster_name}-fargate-app-sg"
+  description = "Security group for app pods on Fargate"
+  vpc_id      = module.vpc.vpc_id
+
+  egress_with_cidr_blocks = [
+    {
+      rule        = "all-all"
+      cidr_blocks = "0.0.0.0/0"
+      description = "Allow all outbound traffic"
+    }
+  ]
+
+  tags = local.tags
+}
+
+# SG for EFS filesystem
+module "efs_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.3"
+
+  name        = "${local.cluster_name}-efs-sg"
+  description = "Security group for EFS filesystem"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_with_source_security_group_id = [ 
+    {
+        rule = "nfs-tcp"
+        source_security_group_id = module.eks.cluster_primary_security_group_id
+        description = "Allow EKS cluster to access EFS via NFS"
+    }
+   ]
+
+  tags = local.tags
+}
+
 ###############################################################
 # RDS — Subnet group, parameter group, instance
 ###############################################################
@@ -389,21 +414,20 @@ resource "aws_db_instance" "me_website_k8s_db" {
   engine                      = "postgres"
   engine_version              = "17.4"
   username                    = "me_website_k8s_admin"
-  password_wo                 = ephemeral.random_password.db_password.result
-  password_wo_version         = local.db_password_version
+  password                    = random_password.db_password.result
   allow_major_version_upgrade = true
 
   db_subnet_group_name   = aws_db_subnet_group.me_website_rds.name
-  vpc_security_group_ids = [module.rds_security_group.id]
+  vpc_security_group_ids = [module.rds_security_group.security_group_id]
   parameter_group_name   = aws_db_parameter_group.me_website_k8s_rds_parameters.name
 
   skip_final_snapshot     = true
   backup_retention_period = 1
 }
 
-ephemeral "random_password" "db_password" {
-  length  = 16
-  special = false
+resource "random_password" "db_password" {
+  length  = 32
+  special = true
 }
 
 ###############################################################
@@ -419,12 +443,14 @@ resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
   secret_id = aws_secretsmanager_secret.rds_master_credentials.id
 
   secret_string = jsonencode({
-    engine   = data.aws_db_instance.existing_rds.engine
-    host     = data.aws_db_instance.existing_rds.address
-    username = data.aws_db_instance.existing_rds.master_username
-    password = ephemeral.random_password.db_password.result
-    port     = data.aws_db_instance.existing_rds.port
+    engine   = aws_db_instance.me_website_k8s_db.engine
+    host     = aws_db_instance.me_website_k8s_db.address
+    username = aws_db_instance.me_website_k8s_db.username
+    password = random_password.db_password.result
+    port     = aws_db_instance.me_website_k8s_db.port
   })
+
+  depends_on = [ aws_db_instance.me_website_k8s_db ]
 
   lifecycle {
     ignore_changes = [secret_string]
@@ -450,7 +476,7 @@ resource "aws_secretsmanager_secret_rotation" "rds_master_rotation" {
 
 module "me_website_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "6.2.3"
+  version = "~> 6.2"
 
   name = "${local.cluster_name}-me_website-app"
 
@@ -632,7 +658,7 @@ data "archive_file" "rds_lambda_zip" {
 # Lambda security group
 module "rds_lambda_security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
+  version = "~> 5.3"
 
   name        = "${local.cluster_name}-lambda-rds-sg"
   description = "Security group for the RDS instance"
@@ -651,7 +677,7 @@ module "rds_lambda_security_group" {
   egress_with_cidr_blocks = [
     {
       rule        = "https-443-tcp"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = "0.0.0.0/0"
       description = "Allow Lambda to access Secrets Manager"
     }
   ]
