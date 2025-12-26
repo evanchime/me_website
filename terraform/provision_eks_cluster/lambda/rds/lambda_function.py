@@ -6,8 +6,9 @@ import boto3
 import json
 import logging
 import os
-import pg
-import pgdb
+import psycopg2
+import psycopg2.extras
+import psycopg2.errors
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -281,16 +282,17 @@ def set_secret(service_client, arn, token):
             cur.execute("SELECT quote_ident(%s)", (pending_dict['username'],))
             escaped_username = cur.fetchone()[0]
 
-            alter_role = "ALTER USER %s" % escaped_username
             cur.execute(
-                alter_role + " WITH PASSWORD %s", (pending_dict['password'],)
+                f"ALTER USER {escaped_username} WITH PASSWORD %s",
+                (pending_dict['password'],)
             )
-            conn.commit()
-            logger.info(
-                "setSecret: Successfully set password for user %s in "
-                "PostgreSQL DB for secret arn %s." 
-                % (pending_dict['username'], arn)
-            )
+        conn.commit()
+        logger.info(
+            "setSecret: Successfully set password for user %s in "
+            "PostgreSQL DB for secret arn %s." 
+            % (pending_dict['username'], arn)
+        )
+
     finally:
         conn.close()
 
@@ -332,7 +334,6 @@ def test_secret(service_client, arn, token):
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT NOW()")
-                conn.commit()
         finally:
             conn.close()
 
@@ -415,19 +416,20 @@ def get_connection(secret_dict):
 
     """
     # Parse and validate the secret JSON string
-    port = int(secret_dict['port']) if 'port' in secret_dict else 5432
-    dbname = secret_dict['dbname'] if 'dbname' in secret_dict else "postgres"
-
+    port = int(secret_dict.get('port', 5432))
+    dbname = secret_dict.get('dbname', "postgres")
+    
     # Get SSL connectivity configuration
     use_ssl, fall_back = get_ssl_config(secret_dict)
 
     # if an 'ssl' key is not found or does not contain a valid value, 
     # attempt an SSL connection and fall back to non-SSL on failure
     conn = connect_and_authenticate(secret_dict, port, dbname, use_ssl)
+
     if conn or not fall_back:
         return conn
-    else:
-        return connect_and_authenticate(secret_dict, port, dbname, False)
+
+    return connect_and_authenticate(secret_dict, port, dbname, False)
 
 
 def get_ssl_config(secret_dict):
@@ -499,60 +501,49 @@ def connect_and_authenticate(secret_dict, port, dbname, use_ssl):
         KeyError: If the secret json does not contain the expected keys
 
     """
-    # Try to obtain a connection to the db
+    sslmode = "verify-full" if use_ssl else "disable"
+
     try:
-        if use_ssl:
-            # Setting sslmode='verify-full' will verify the server's 
-            # certificate and check the server's host name
-            conn = pgdb.connect(
-                host=secret_dict['host'], 
-                user=secret_dict['username'], 
-                password=secret_dict['password'], 
-                database=dbname, 
-                port=port,
-                connect_timeout=5, 
-                sslrootcert='/etc/pki/tls/cert.pem', 
-                sslmode='verify-full'
-            )
-        else:
-            conn = pgdb.connect(
-                host=secret_dict['host'], 
-                user=secret_dict['username'], 
-                password=secret_dict['password'], 
-                database=dbname, 
-                port=port,
-                connect_timeout=5, 
-                sslmode='disable'
-            )
-        logger.info(
-            "Successfully established %s connection as user '%s' "
-            "with host: '%s'" % (
-                "SSL/TLS" if use_ssl else "non SSL/TLS", 
-                secret_dict['username'], 
-                secret_dict['host']
-            )
+        conn = psycopg2.connect(
+            host=secret_dict['host'],
+            user=secret_dict['username'],
+            password=secret_dict['password'],
+            dbname=dbname,
+            port=port,
+            connect_timeout=5,
+            sslmode=sslmode,
+            sslrootcert='/etc/pki/tls/cert.pem' if use_ssl else None
         )
+
+        logger.info(
+            "Successfully established %s connection as user '%s' with host '%s'"
+            % ("SSL/TLS" if use_ssl else "non SSL/TLS",
+               secret_dict['username'],
+               secret_dict['host'])
+        )
+
         return conn
-    except pg.InternalError as e:
-        if "server does not support SSL, but SSL was required" in e.args[0]:
+
+    except psycopg2.Error as e:
+        msg = str(e)
+
+        if "server does not support SSL" in msg:
             logger.error(
-                "Unable to establish SSL/TLS handshake, SSL/TLS is not enabled "
-                "on the host: %s" % secret_dict['host']
+                "SSL/TLS required but not supported by host %s" 
+                % secret_dict['host']
             )
-        elif re.search(
-            'server common name ".+" does not match host name ".+"', e.args[0]
-        ):
+
+        elif "certificate verify failed" in msg:
             logger.error(
-                "Hostname verification failed when estlablishing "
-                "SSL/TLS Handshake with host: %s" % secret_dict['host']
+                "Hostname verification failed for host %s" % secret_dict['host']
             )
-        elif re.search(
-            'no pg_hba.conf entry for host ".+", SSL off', e.args[0]
-        ):
+
+        elif "no pg_hba.conf entry" in msg:
             logger.error(
-                "Unable to establish SSL/TLS handshake, SSL/TLS is enforced "
-                "on the host: %s" % secret_dict['host']
+                "SSL/TLS enforced on host %s but client attempted non-SSL" 
+                % secret_dict['host']
             )
+
         return None
 
 

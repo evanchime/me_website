@@ -125,21 +125,9 @@ resource "kubernetes_service_account_v1" "me_website" {
   depends_on = [module.eks]
 }
 
-# Create only the namespaces we actually need
-resource "kubernetes_namespace" "me_website_app" {
-  metadata {
-    name = "me_website-app"
-    labels = {
-      name = "me_website-app"
-    }
-  }
-
-  depends_on = [module.eks]
-}
-
 resource "kubernetes_persistent_volume" "efs_pv" {
   metadata {
-      name = "me_website-efs-pv"
+      name = "me-website-efs-pv"
   }
   spec {
     capacity = {
