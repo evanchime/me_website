@@ -6,18 +6,26 @@ provider "aws" {
   region = var.region
 }
 
+
+data "aws_eks_cluster" "cluster" {
+  name = module.eks.cluster_name
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.eks.cluster_name
+}
+
 provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args = [
-      "eks",
-      "get-token",
-      "--cluster-name",
-      module.eks.cluster_name
-    ]
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
   }
 }
 
@@ -31,6 +39,10 @@ locals {
     Environment = "production"
     Terraform   = "true"
   }
+  
+  # Current IP for EKS API access
+  my_ip_cidr = "${data.external.my_ip.result.ip}/32"
+
 }
 
 # Random strings for naming
@@ -61,6 +73,14 @@ data "aws_availability_zones" "available" {
 
 data "aws_route53_zone" "iplayishow" {
   name = "${trimsuffix(var.domain_name, ".")}."
+}
+
+data "external" "my_ip" {
+  program = [
+    "bash",
+    "-c",
+    "echo '{\"ip\": \"'$(curl -s https://checkip.amazonaws.com)'\"}'"
+  ]
 }
 
 #######################################################
@@ -102,7 +122,7 @@ module "vpc" {
 # EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + App FARGATE PROFILE
 #######################################################################################
 
-resource "kubernetes_namespace" "me_website_app" {
+resource "kubernetes_namespace_v1" "me_website_app" {
   metadata {
     name = "me-website-app"
   }
@@ -118,7 +138,7 @@ module "fargate_me_website" {
 
   selectors = [
     {
-      namespace = kubernetes_namespace.me_website_app.metadata[0].name
+      namespace = kubernetes_namespace_v1.me_website_app.metadata[0].name
     }
   ]
 
@@ -133,7 +153,7 @@ module "fargate_me_website" {
   }
 
   depends_on = [
-    kubernetes_namespace.me_website_app
+    kubernetes_namespace_v1.me_website_app
   ]
 }
 
@@ -144,6 +164,8 @@ module "eks" {
   name = local.cluster_name
 
   endpoint_public_access  = true
+  endpoint_private_access = true
+  endpoint_public_access_cidrs = ["0.0.0.0/0"]
 
   enable_cluster_creator_admin_permissions = true
 
@@ -184,6 +206,13 @@ module "eks" {
         { namespace = "default" }
       ]
     }
+    cert_manager = {
+        name       = "fp-cert-manager"
+        subnet_ids = module.vpc.private_subnets
+        selectors = [
+            { namespace = "cert-manager" }
+        ]
+    }
   }
 
   tags = local.tags
@@ -202,13 +231,30 @@ module "eks_blueprints_addons" {
   cluster_version   = module.eks.cluster_version
   oidc_provider_arn = module.eks.oidc_provider_arn
 
-  enable_aws_load_balancer_controller          = true
-  enable_cluster_proportional_autoscaler       = true
+  enable_aws_load_balancer_controller = true
+  aws_load_balancer_controller = {
+    namespace = "kube-system"
+  }
+
   enable_metrics_server                        = true
   enable_external_dns                          = true
-  enable_cert_manager                          = true
   enable_secrets_store_csi_driver              = true
   enable_secrets_store_csi_driver_provider_aws = true
+
+  enable_cert_manager                          = true
+  cert_manager = {
+    name      = "cert-manager-core"
+    namespace = "cert-manager"
+
+    values = [
+        <<-EOF
+        webhook:
+            securePort: 10260
+            validatingWebhookConfigurationAnnotations: {}
+        EOF
+    ]
+ }
+  
 
   cert_manager_route53_hosted_zone_arns = [
     data.aws_route53_zone.iplayishow.arn
@@ -625,11 +671,6 @@ data "aws_iam_policy_document" "lambda_permissions_policy" {
       "ec2:UnassignPrivateIpAddresses",
     ]
     resources = ["*"]
-    condition {
-      test     = "ArnEquals"
-      variable = "lambda:SourceFunctionArn"
-      values   = [aws_lambda_function.rds_postgres_rotation.arn]
-    }
   }
 
   statement {
@@ -657,27 +698,6 @@ resource "aws_iam_role_policy" "lambda_permissions_policy" {
   name   = "lambda_permissions_policy"
   role   = aws_iam_role.rds_secrets_rotation_lambda.id
   policy = data.aws_iam_policy_document.lambda_permissions_policy.json
-}
-
-# Install Python dependencies before zipping Lambda
-resource "terraform_data" "rds_lambda_install_dependencies" {
-  triggers_replace = [
-    filebase64sha256("${path.module}/lambda/rds/requirements.txt"),
-    filebase64sha256("${path.module}/lambda/rds/lambda_function.py")
-  ]
-
-  provisioner "local-exec" {
-    command = "cd ${path.module}/lambda/rds && pip install -r requirements.txt -t ."
-  }
-}
-
-# Package Lambda code
-data "archive_file" "rds_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda/rds"
-  output_path = "${path.module}/lambda/rds/rds_function.zip"
-
-  depends_on = [terraform_data.rds_lambda_install_dependencies]
 }
 
 # Lambda security group
@@ -742,7 +762,6 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
 
   # Ensure dependencies, IAM role, and SG exist before Lambda is created
   depends_on = [
-    terraform_data.rds_lambda_install_dependencies,
     aws_iam_role_policy_attachment.lambda_basic_execution,
     module.rds_lambda_security_group
   ]
