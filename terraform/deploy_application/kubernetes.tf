@@ -26,23 +26,14 @@ data "aws_eks_cluster" "cluster" {
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
-  }
+  token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
 }
 
 provider "helm" {
   kubernetes {
     host                   = data.aws_eks_cluster.cluster.endpoint
     cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
-    }
+    token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
   }
 }
 
@@ -73,6 +64,22 @@ locals {
     concat(local.existing_map_roles, [local.lambda_map_role])
   )
   me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
+}
+
+module "tfc_rbac_app" {
+  source = "../modules/tfc-rbac"
+
+  mode            = "application"
+  cluster_name    = module.eks.cluster_name
+  target_namespace = "me-website-app"
+
+  tfc_hostname  = var.tfc_hostname
+  tfc_org       = var.tfc_org
+  tfc_project   = var.tfc_project
+  tfc_workspace = var.tfc_workspace
+
+  tfc_kubernetes_audience           = var.tfc_kubernetes_audience
+  tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
 resource "kubernetes_config_map" "aws_auth_merged" {
