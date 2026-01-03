@@ -6,26 +6,21 @@ provider "aws" {
   region = var.region
 }
 
-
 data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_name
-}
-
-data "aws_eks_cluster_auth" "cluster" {
   name = module.eks.cluster_name
 }
 
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
+  token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
 }
 
 provider "helm" {
   kubernetes {
     host                   = data.aws_eks_cluster.cluster.endpoint
     cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.cluster.token
+    token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
   }
 }
 
@@ -81,6 +76,24 @@ data "external" "my_ip" {
     "-c",
     "echo '{\"ip\": \"'$(curl -s https://checkip.amazonaws.com)'\"}'"
   ]
+}
+
+###############################################
+# CONFIGURE K8S RBAC FOR TERRAFORM CLOUD 
+###############################################
+module "tfc_rbac_platform" {
+  source = "../modules/tfc-rbac"
+
+  mode         = "platform"
+  cluster_name = module.eks.cluster_name
+
+  tfc_hostname  = var.tfc_hostname
+  tfc_org       = var.tfc_org
+  tfc_project   = var.tfc_project
+  tfc_workspace = var.tfc_workspace
+
+  tfc_kubernetes_audience           = var.tfc_kubernetes_audience
+  tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
 #######################################################
