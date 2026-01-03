@@ -86,3 +86,20 @@ output "me_website_irsa_role_arn" {
   description = "The ARN of the IAM role created for the me_website application service account."
   value       = module.me_website_irsa_role.arn
 }
+
+output "me_website_k8s_db_endpoint" {
+  value = aws_db_instance.me_website_k8s_db.endpoint
+}
+
+output "me_website_k8s_db_username" {
+  value = aws_db_instance.me_website_k8s_db.username
+}
+
+output "me_website_k8s_db_password" {
+  value = aws_db_instance.me_website_k8s_db.password
+  sensitive = true
+}
+
+output "me_website_k8s_db_security_group_id" {
+  value = module.rds_security_group.security_group_id
+}
