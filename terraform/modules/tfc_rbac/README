@@ -1,0 +1,26 @@
+# TFC RBAC module
+
+This module wires HCP Terraform (Terraform Cloud) OIDC identities into EKS RBAC with two modes:
+
+- `platform`: cluster-wide RBAC (cluster-admin) for a single, tightly-controlled platform workspace
+- `application`: namespace-scoped RBAC for application workspaces
+
+It assumes:
+
+- HCP Terraform dynamic Kubernetes credentials are enabled
+- The Kubernetes and Helm providers use the short-lived token exposed via `tfc_kubernetes_dynamic_credentials`
+
+## Inputs
+
+- `mode`: `"platform"` or `"application"`
+- `tfc_hostname`: e.g. `https://app.terraform.io`
+- `tfc_org`, `tfc_project`, `tfc_workspace`: TFC identity components
+- `target_namespace`: required when `mode = "application"`
+- `cluster_name`: EKS cluster name
+- `tfc_kubernetes_audience`: must match `TFC_KUBERNETES_WORKLOAD_IDENTITY_AUDIENCE`
+- `tfc_kubernetes_dynamic_credentials`: object injected by HCP Terraform for dynamic credentials
+
+## Outputs
+
+- `tfc_users`: the `plan` and `apply` user identities
+- `identity_provider_config`: the EKS identity provider config name
