@@ -44,11 +44,6 @@ data "kubernetes_config_map" "aws_auth" {
     name      = "aws-auth"
     namespace = "kube-system"
   }
-
-  depends_on = [
-    module.eks,                 # cluster must exist
-    module.eks.fargate_profiles 
-  ]
 }
 
 locals {
@@ -82,6 +77,15 @@ module "tfc_rbac_app" {
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
+resource "aws_s3_bucket" "me_website_static" {
+  bucket = "me-website-static-${data.aws_caller_identity.current.account_id}"
+  acl    = "private"
+
+  tags = {
+    Name = "me-website-static"
+  }
+}
+
 resource "kubernetes_config_map" "aws_auth_merged" {
   metadata {
     name      = "aws-auth"
@@ -91,42 +95,36 @@ resource "kubernetes_config_map" "aws_auth_merged" {
   data = {
     mapRoles = yamlencode(local.merged_map_roles)
   }
-
-  depends_on = [
-    module.eks,
-    module.eks.fargate_profiles
-  ]
 }
 
 # Service account for me_website application
 resource "kubernetes_service_account_v1" "me_website" {
   metadata {
     name      = "me_website-service-account"
-    namespace = kubernetes_namespace.me_website_app.metadata[0].name
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
     annotations = {
-      "eks.amazonaws.com/role-arn" = module.me_website_irsa_role.iam_role_arn
+      "eks.amazonaws.com/role-arn" = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_irsa_role_arn
     }
   }
-
-  depends_on = [module.eks]
 }
 
 resource "kubernetes_persistent_volume" "efs_pv" {
   metadata {
-      name = "me-website-efs-pv"
+    name = "me-website-efs-pv"
   }
+
   spec {
     capacity = {
       storage = "5Gi"
     }
-    access_modes = ["ReadWriteMany"]
-    volume_mode = "Filesystem"
-    persistent_volume_reclaim_policy = "Retain"
-    storage_class_name = "efs"
+    access_modes                         = ["ReadWriteMany"]
+    volume_mode                          = "Filesystem"
+    persistent_volume_reclaim_policy     = "Retain"
+    storage_class_name                   = "efs"
     persistent_volume_source {
       csi {
-        driver = "efs.csi.aws.com"
-        volume_handle = "${module.efs.id}::${module.efs.access_points["me_website-filesystem"].id}"
+        driver       = "efs.csi.aws.com"
+        volume_handle = "${data.terraform_remote_state.platform.outputs.efs_file_system_id}::${data.terraform_remote_state.platform.outputs.efs_access_point_id}"
       }
     }
   }
@@ -135,7 +133,7 @@ resource "kubernetes_persistent_volume" "efs_pv" {
 resource "kubernetes_persistent_volume_claim" "efs_pvc" {
   metadata {
     name      = "me-website-efs-pvc"
-    namespace = kubernetes_namespace.me_website_app.metadata[0].name
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
   }
   spec {
     access_modes = ["ReadWriteMany"]
@@ -145,9 +143,148 @@ resource "kubernetes_persistent_volume_claim" "efs_pvc" {
       }
     }
     storage_class_name = "efs"
-    volume_name = kubernetes_persistent_volume.efs_pv.metadata[0].name
+    volume_name        = kubernetes_persistent_volume.efs_pv.metadata[0].name
   }
+
   depends_on = [ kubernetes_persistent_volume.efs_pv ]
+}
+
+resource "kubernetes_deployment_v1" "me_website" {
+  metadata {
+    name      = "me-website"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+
+    labels = {
+      app = "me-website"
+    }
+  }
+
+  spec {
+    replicas = 2
+
+    selector {
+      match_labels = {
+        app = "me-website"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "me-website"
+        }
+      }
+
+      spec {
+        service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
+
+        container {
+          name  = "me-website"
+          image = local.me_website_image
+
+          port {
+            container_port = 8000
+          }
+
+          env {
+            name  = "DATABASE_HOST"
+            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db.endpoint
+          }
+          env {
+            name  = "DATABASE_USER"
+            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db.username
+          }
+          env {
+            name  = "DATABASE_PASSWORD"
+            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_password
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health/"
+              port = 8000
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health/"
+              port = 8000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 5
+          }
+
+          volume_mount {
+            name       = "efs-volume"
+            mount_path = "/app/media"
+          }
+        }
+
+        volume {
+          name = "efs-volume"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.efs_pvc.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service_v1" "me_website" {
+  metadata {
+    name      = "me-website-app-service"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+  }
+
+  spec {
+    selector = {
+      app = "me-website"
+    }
+
+    port {
+      port        = 8000
+      target_port = 8000
+    }
+
+    type = "ClusterIP"
+  }
+}
+
+resource "kubernetes_ingress_v1" "me_website" {
+  metadata {
+    name      = "me-website-app-ingress"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+    annotations = {
+      "kubernetes.io/ingress.class"              = "alb"
+      "alb.ingress.kubernetes.io/scheme"         = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"    = "ip"
+      "alb.ingress.kubernetes.io/listen-ports"   = jsonencode([{ "HTTP" = 80 }])
+    }
+  }
+
+  spec {
+    rule {
+      http {
+        path {
+          path     = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service_v1.me_website.metadata[0].name
+              port {
+                number = 8000
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 resource "kubernetes_manifest" "lambda_ingress_patcher_role" {
@@ -236,17 +373,17 @@ resource "kubernetes_manifest" "fargate_sg_policy" {
     apiVersion = "vpcresources.k8s.aws/v1beta1"
     kind       = "SecurityGroupPolicy"
     metadata = {
-      name      = "me_website-sg-policy"
-      namespace = "me_website-app"
+      name      = "me-website-sg-policy"
+      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
     }
     spec = {
       podSelector = {
         matchLabels = {
-          app = "me_website"
+          app = "me-website"
         }
       }
       securityGroups = {
-        groupIds = [data.terraform_remote_state.eks.outputs.fargate_app_sg_id]
+        groupIds = [data.terraform_remote_state.platform.outputs.l;ff,bg,lnjknnkfjkdfsjldfviojdf v jhlvfhukvfdhyid huidui]
       }
     }
   }
@@ -318,48 +455,74 @@ resource "aws_iam_role_policy_attachment" "additional-necessary-policies" {
 }
 
 
-data "archive_file" "alb_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda/alb"
-  output_path = "${path.module}/lambda/alb/alb_function.zip"
-
-  depends_on = [terraform_data.alb_lambda_install_dependencies]
-}
-
-resource "terraform_data" "alb_lambda_install_dependencies" {
+resource "terraform_data" "alb_lambda_package" {
   triggers_replace = [
-    filebase64sha256("${path.module}/lambda/alb/requirements.txt"),
     filebase64sha256("${path.module}/lambda/alb/lambda_function.py")
   ]
 
   provisioner "local-exec" {
-    command = "cd ${path.module}/lambda/alb && pip install -r requirements.txt -t ."
+    command = <<EOF
+      rm -f "${path.module}/lambda/alb/lambda_function.zip"
+      cd "${path.module}/lambda/alb" && zip -r lambda_function.zip lambda_function.py
+    EOF
   }
 }
 
-resource "aws_lambda_function" "update_cloudfront_alb_origin" {
-  filename         = data.archive_file.alb_lambda_zip.output_path
-  function_name = "cloudfront-alb-origin-update-function"
-  role        = aws_iam_role.lambda_cloudfront_updater_role.arn
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.9"
-  source_code_hash = data.archive_file.alb_lambda_zip.output_base64sha256
-  timeout     = 300
-  memory_size = 128
-  reserved_concurrent_executions = 1
-  environment {
-    variables = {
-      cloudfront_distribution_id = var.cloudfront_distribution_id
-    }
+resource "terraform_data" "alb_lambda_install_dependencies" {
+  triggers_replace = [
+    filebase64sha256("${path.module}/lambda/alb/requirements.txt")
+  ]
+
+  provisioner "local-exec" {
+    command = <<EOF
+        rm -rf "${path.module}/lambda/alb/layer"
+        mkdir -p "${path.module}/lambda/alb/layer/python"
+        pip install -r "${path.module}/lambda/alb/requirements.txt" -t "${path.module}/lambda/alb/layer/python"
+        rm -f "${path.module}/lambda/alb/lambda_layer.zip"
+        cd "${path.module}/lambda/alb/layer" && zip -r ../lambda_layer.zip .
+    EOF
   }
 
+}
 
+resource "aws_lambda_layer_version" "lambda_layer" {
+  depends_on = [terraform_data.alb_lambda_install_dependencies]
+
+  filename   = "${path.module}/lambda/alb/lambda_layer.zip"
+  layer_name = "lambda-layer"
+  compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
+
+  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_layer.zip")
+}
+
+resource "aws_lambda_function" "update_cloudfront_alb_origin" {
   depends_on = [
+    terraform_data.alb_lambda_package,
     terraform_data.alb_lambda_install_dependencies,
     aws_iam_role_policy_attachment.attach_custom_policy,
     aws_iam_role_policy_attachment.additional-necessary-policies
   ]
 
+  filename         = "${path.module}/lambda/alb/lambda_function.zip"
+  function_name    = "cloudfront-alb-origin-update-function"
+  role             = aws_iam_role.lambda_cloudfront_updater_role.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_function.zip")
+
+  layers = [
+    aws_lambda_layer_version.lambda_layer.arn
+  ]
+
+  timeout     = 300
+  memory_size = 128
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      cloudfront_distribution_id = var.cloudfront_distribution_id
+    }
+  }
 }
 
 resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
@@ -385,7 +548,6 @@ resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
 }
 PATTERN
 }
-
 
 resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
   rule      = aws_cloudwatch_event_rule.create_loadbalancer_event.name

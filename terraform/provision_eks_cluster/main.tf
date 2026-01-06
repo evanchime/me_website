@@ -79,7 +79,7 @@ data "external" "my_ip" {
 }
 
 ###############################################
-# CONFIGURE K8S RBAC FOR TERRAFORM CLOUD 
+# CONFIGURE K8S OIDC RBAC FOR THIS WORKSPACE 
 ###############################################
 module "tfc_rbac_platform" {
   source = "../modules/tfc-rbac"
@@ -743,15 +743,52 @@ module "rds_lambda_security_group" {
   tags = local.tags
 }
 
-resource "aws_lambda_layer_version" "psycopg2" {
-  filename   = "./lambda/rds/layer.zip"
-  layer_name = "psycopg2-layer"
+resource "terraform_data" "rds_lambda_package" {
+  triggers_replace = [
+    filebase64sha256("${path.module}/lambda/rds/lambda_function.py")
+  ]
+
+  provisioner "local-exec" {
+    command = <<EOF
+      rm -f "${path.module}/lambda/rds/lambda_function.zip"
+      cd "${path.module}/lambda/rds" && zip -r lambda_function.zip lambda_function.py
+    EOF
+  }
+}
+
+resource "terraform_data" "rds_lambda_install_dependencies"{
+    triggers_replace = [
+        filebase64sha256("${path.module}/lambda/rds/requirements.txt")
+    ]
+    provisioner "local-exec" {
+        command = <<EOF
+            rm -rf "${path.module}/lambda/rds/layer"
+            rm -f "${path.module}/lambda/rds/lambda_layer.zip"
+            mkdir -p "${path.module}/lambda/rds/layer/python"
+
+            docker run \
+            --rm \
+            -v "${path.module}/lambda/rds":/var/task \
+            public.ecr.aws/lambda/python:3.11 \
+            /bin/bash -c "\
+                pip install -r requirements.txt -t layer/python && \
+                cd layer && zip -r ../lambda_layer.zip . \
+            "
+        EOF
+    }
+}
+
+resource "aws_lambda_layer_version" "lambda_layer" {
+  depends_on = [terraform_data.rds_lambda_install_dependencies]
+  filename   = "${path.module}/lambda/rds/lambda_layer.zip"
+  layer_name = "lambda-layer"
   compatible_runtimes = ["python3.11"]
+  source_code_hash = filebase64sha256("${path.module}/lambda/rds/lambda_layer.zip")
 }
 
 # Lambda function
 resource "aws_lambda_function" "rds_postgres_rotation" {
-  filename         = "./lambda/rds/lambda_function.zip"
+  filename         = "${path.module}/lambda/rds/lambda_function.zip"
   function_name    = "rds_postgres_rotation_single_user"
   role             = aws_iam_role.rds_secrets_rotation_lambda.arn
   handler          = "lambda_function.lambda_handler"
@@ -759,7 +796,7 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
   timeout          = 60
 
   layers = [
-    aws_lambda_layer_version.psycopg2.arn
+    aws_lambda_layer_version.lambda_layer.arn
   ]
 
   # Environment variables for rotation logic
@@ -776,7 +813,9 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
   # Ensure dependencies, IAM role, and SG exist before Lambda is created
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic_execution,
-    module.rds_lambda_security_group
+    module.rds_lambda_security_group,
+    terraform_data.rds_lambda_package,
+    terraform_data.rds_lambda_install_dependencies,
   ]
 
   # Lambda runs inside the VPC to reach RDS
