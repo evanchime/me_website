@@ -49,6 +49,7 @@ variable "tfc_project" {
 variable "tfc_workspace" {
   description = "Terraform Cloud workspace name"
   type        = string
+  default     = "me-website-k8s-platform"
 }
 
 variable "tfc_kubernetes_audience" {
