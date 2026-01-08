@@ -107,3 +107,7 @@ output "me_website_k8s_db_security_group_id" {
 output "me_website_app_kubernetes_namespace" {
   value = kubernetes_namespace_v1.me_website_app.metadata[0].name
 }
+
+output "alb_security_group_id" {
+  value = module.alb_security_group.security_group_id
+}
