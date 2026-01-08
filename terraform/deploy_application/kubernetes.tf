@@ -46,6 +46,14 @@ data "kubernetes_config_map" "aws_auth" {
   }
 }
 
+data "kubernetes_ingress_v1" "me_website_app" {
+  metadata {
+    name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
+    namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
+  }
+}
+
+
 locals {
   existing_map_roles = (
     try(yamldecode(data.kubernetes_config_map.aws_auth.data["mapRoles"]), [])
@@ -201,7 +209,7 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           liveness_probe {
             http_get {
-              path = "/health/"
+              path = "/ht/"
               port = 8000
             }
             initial_delay_seconds = 30
@@ -210,7 +218,7 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           readiness_probe {
             http_get {
-              path = "/health/"
+              path = "/ht/"
               port = 8000
             }
             initial_delay_seconds = 10
@@ -251,39 +259,6 @@ resource "kubernetes_service_v1" "me_website" {
     }
 
     type = "ClusterIP"
-  }
-}
-
-resource "kubernetes_ingress_v1" "me_website" {
-  metadata {
-    name      = "me-website-app-ingress"
-    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
-    annotations = {
-      "kubernetes.io/ingress.class"              = "alb"
-      "alb.ingress.kubernetes.io/scheme"         = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"    = "ip"
-      "alb.ingress.kubernetes.io/listen-ports"   = jsonencode([{ "HTTP" = 80 }])
-    }
-  }
-
-  spec {
-    rule {
-      http {
-        path {
-          path     = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = kubernetes_service_v1.me_website.metadata[0].name
-              port {
-                number = 8000
-              }
-            }
-          }
-        }
-      }
-    }
   }
 }
 
@@ -329,18 +304,17 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
     apiVersion = "networking.k8s.io/v1"
     kind       = "Ingress"
     metadata = {
-      name      = "me_website-app-ingress"
-      namespace = "me_website-app"
+      name      = "me-website-app-ingress"
+      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
       annotations = {
         "kubernetes.io/ingress.class" = "alb"
         "alb.ingress.kubernetes.io/scheme" = "internal"
-        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me_website-app-alb"
+        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
         "alb.ingress.kubernetes.io/security-groups" = join(",", [
-          data.terraform_remote_state.eks.outputs.cluster_primary_security_group_id,
-          data.terraform_remote_state.eks.outputs.cloudfront_alb_security_group_id
+          data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_primary_security_group_id,
+          data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         ])
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTPS" = 443 }])
-        "alb.ingress.kubernetes.io/conditions.secure-rule" = ""
       }
     }
     spec = {
@@ -351,7 +325,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
             pathType = "Prefix"
             backend = {
               service = {
-                name = "me_website-app-service"
+                name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_service_name
                 port = { number = 8000 }
               }
             }
@@ -383,77 +357,11 @@ resource "kubernetes_manifest" "fargate_sg_policy" {
         }
       }
       securityGroups = {
-        groupIds = [data.terraform_remote_state.platform.outputs.l;ff,bg,lnjknnkfjkdfsjldfviojdf v jhlvfhukvfdhyid huidui]
+        groupIds = [data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id]
       }
     }
   }
 }
-
-data "archive_file" "lambda_my_function" {
-  type             = "zip"
-  source_file      = "../src/lambda-cloudfront.py"
-  output_file_mode = "0666"
-  output_path      = "${path.module}/files/cloudfront.zip"
-}
-
-resource "aws_iam_role" "lambda_cloudfront_updater_role" {
-  name               = "lambda-cloudfront-updater-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-data "aws_iam_policy_document" "lambda_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-    effect = "Allow"
-  }
-}
-
-resource "aws_iam_policy" "specific_cloudfront_updates" {
-  name        = "SpecificCloudFrontUpdatesPolicy"
-  description = "Allows updating only a specific CloudFront distribution"
-  policy      = data.aws_iam_policy_document.specific_cloudfront_updates.json
-}
-
-data "aws_iam_policy_document" "specific_cloudfront_updates" {
-  # Allow read-only access to ALL distributions (for listing/getting)
-  statement {
-    sid       = "ReadOnlyAccess"
-    effect    = "Allow"
-    actions   = [
-      "cloudfront:List*",
-      "cloudfront:Get*"
-    ]
-    resources = ["*"]
-  }
-
-  # Restrict WRITE access to our distribution only
-  statement {
-    sid    = "WriteToOurDistribution"
-    effect = "Allow"
-    actions = [
-      "cloudfront:UpdateDistribution",
-      "cloudfront:UpdateCloudFrontOriginAccessIdentity"
-    ]
-    # REPLACE with your specific CloudFront Distribution ARN
-    resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${var.cloudfront_distribution_id}"]
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "attach_custom_policy" {
-  role       = aws_iam_role.lambda_cloudfront_updater_role.name
-  policy_arn = aws_iam_policy.specific_cloudfront_updates.arn
-}
-
-resource "aws_iam_role_policy_attachment" "additional-necessary-policies" {
-  role       = aws_iam_role.lambda_cloudfront_updater_role.name
-  count      = length(var.iam_policy_arn)
-  policy_arn = var.iam_policy_arn[count.index]
-}
-
 
 resource "terraform_data" "alb_lambda_package" {
   triggers_replace = [
@@ -520,7 +428,7 @@ resource "aws_lambda_function" "update_cloudfront_alb_origin" {
 
   environment {
     variables = {
-      cloudfront_distribution_id = var.cloudfront_distribution_id
+      cloudfront_distribution_id = aws_cloudfront_distribution.me_website.id
     }
   }
 }
