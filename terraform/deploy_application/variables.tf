@@ -1,20 +1,3 @@
-variable "app_alb_dns_name" {
-  description = "DNS name of the ALB fronting the Django app"
-  type        = string
-}
-
-variable "static_bucket_domain_name" {
-  description = "Domain name of the static S3 bucket origin"
-  type        = string
-  default     = "me-website-bucket.s3.eu-west-2.amazonaws.com"
-}
-
-variable "error_pages_bucket_domain_name" {
-  description = "Domain name of the error pages S3 bucket origin"
-  type        = string
-  default     = "me-website-static-error-pages-bucket.s3.eu-west-2.amazonaws.com"
-}
-
 variable "cloudfront_distribution_id" {
   description = "cloudfront_distribution_id"
   type        = string

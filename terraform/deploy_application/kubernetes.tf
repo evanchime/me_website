@@ -85,15 +85,6 @@ module "tfc_rbac_app" {
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
-resource "aws_s3_bucket" "me_website_static" {
-  bucket = "me-website-static-${data.aws_caller_identity.current.account_id}"
-  acl    = "private"
-
-  tags = {
-    Name = "me-website-static"
-  }
-}
-
 resource "kubernetes_config_map" "aws_auth_merged" {
   metadata {
     name      = "aws-auth"
