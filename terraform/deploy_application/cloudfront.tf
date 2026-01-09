@@ -1,3 +1,45 @@
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+data "aws_acm_certificate" "cloudfront_cert" {
+  provider = aws.us_east_1
+  domain   = "iplayishow.com"
+  statuses = ["ISSUED"]
+  most_recent = true
+}
+
+data "aws_cloudfront_cache_policy" "app_cache" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "app_request" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
+data "aws_cloudfront_cache_policy" "static_cache" {
+  name = "Managed-CachingOptimized"
+}
+
+data "aws_cloudfront_response_headers_policy" "static_headers" {
+  name = "Managed-SimpleCORS"
+}
+
+data "aws_cloudfront_cache_policy" "error_cache" {
+  name = "Managed-CachingDisabled"
+}
+
+resource "aws_cloudfront_origin_access_control" "me_website-oac" {
+  for_each = local.s3_origins
+
+  name                              = "oac-${each.key}"
+  description                       = "OAC for ${each.key} S3 origin"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 resource "aws_cloudfront_distribution" "me_website" {
   enabled             = true
   comment             = "me-website CloudFront distribution"
@@ -31,18 +73,17 @@ resource "aws_cloudfront_distribution" "me_website" {
 
   # Static files origin (S3)
   origin {
-    domain_name              = var.static_bucket_domain_name
+    domain_name              = local.s3_origins.static.bucket_domain
     origin_id                = "static-origin"
-    origin_access_control_id = "E22WCEJAR6758S" # or replace with aws_cloudfront_origin_access_control.*.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["static"].id
 
-    # using OAC instead of legacy OAI, so no s3_origin_config
   }
 
   # Error pages origin (S3)
   origin {
-    domain_name              = var.error_pages_bucket_domain_name
+    domain_name              = local.s3_origins.error_pages.bucket_domain
     origin_id                = "error-pages-origin"
-    origin_access_control_id = "E36POSVKU25VQM" # or replace with aws_cloudfront_origin_access_control.*.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["error_pages"].id
   }
 
   # ------------ DEFAULT BEHAVIOR (APP) ------------
@@ -66,9 +107,8 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    # Same as your export
-    cache_policy_id          = "d28f3cd2-c7df-4f9c-869b-c4ff433fb74b"
-    origin_request_policy_id = "5bc19d50-2297-45ff-9b93-2cb198db5484"
+    cache_policy_id          = data.aws_cloudfront_cache_policy.app_cache.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.app_request.id
 
     compress  = true
     min_ttl   = 0
@@ -95,8 +135,8 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-    response_headers_policy_id = "4e525da8-319b-40d2-8a32-72499ae5da61"
+    cache_policy_id            = data.aws_cloudfront_cache_policy.static_cache.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.static_headers.id
 
     compress   = true
     min_ttl    = 0
@@ -120,7 +160,7 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id = "b5728d30-8c7d-4f3f-8a64-6417da4a466e"
+    cache_policy_id = data.aws_cloudfront_cache_policy.error_cache.id
 
     compress   = true
     min_ttl    = 0
@@ -189,7 +229,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = "arn:aws:acm:us-east-1:661510969671:certificate/a356c6a6-82fc-4c32-a0eb-fe10ca213bcf"
+    acm_certificate_arn            = data.aws_acm_certificate.cloudfront_cert.arn
     ssl_support_method             = "sni-only"
     minimum_protocol_version       = "TLSv1.2_2021"
     cloudfront_default_certificate = false
