@@ -299,12 +299,9 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
       namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
       annotations = {
         "kubernetes.io/ingress.class" = "alb"
-        "alb.ingress.kubernetes.io/scheme" = "internal"
         "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
-        "alb.ingress.kubernetes.io/security-groups" = join(",", [
-          data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_primary_security_group_id,
-          data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
-        ])
+        "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
+        "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTPS" = 443 }])
       }
     }

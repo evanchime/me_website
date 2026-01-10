@@ -3,6 +3,33 @@ provider "aws" {
   region = "us-east-1"
 }
 
+locals {
+  cloudfront_policies = {
+    app_cache = {
+      type = "cache"
+      name = "Managed-CachingDisabled"
+    }
+    static_cache = {
+      type = "cache"
+      name = "Managed-CachingOptimized"
+    }
+    error_cache = {
+      type = "cache"
+      name = "Managed-CachingDisabled"
+    }
+  }
+}
+
+data "aws_cloudfront_cache_policy" "policies" {
+  for_each = {
+    for k, v in local.cloudfront_policies :
+    k => v
+    if v.type == "cache"
+  }
+
+  name = each.value.name
+}
+
 data "aws_acm_certificate" "cloudfront_cert" {
   provider = aws.us_east_1
   domain   = "iplayishow.com"
@@ -10,24 +37,12 @@ data "aws_acm_certificate" "cloudfront_cert" {
   most_recent = true
 }
 
-data "aws_cloudfront_cache_policy" "app_cache" {
-  name = "Managed-CachingDisabled"
-}
-
 data "aws_cloudfront_origin_request_policy" "app_request" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-data "aws_cloudfront_cache_policy" "static_cache" {
-  name = "Managed-CachingOptimized"
-}
-
 data "aws_cloudfront_response_headers_policy" "static_headers" {
   name = "Managed-SimpleCORS"
-}
-
-data "aws_cloudfront_cache_policy" "error_cache" {
-  name = "Managed-CachingDisabled"
 }
 
 resource "aws_cloudfront_origin_access_control" "me_website-oac" {
@@ -44,7 +59,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   enabled             = true
   comment             = "me-website CloudFront distribution"
   is_ipv6_enabled     = true
-  price_class         = "PriceClass_All"
+  price_class         = "PriceClass_200"
   http_version        = "http2and3"
   default_root_object = ""
 
@@ -59,7 +74,10 @@ resource "aws_cloudfront_distribution" "me_website" {
   # App origin (ALB) – previously EC2; NO X-Secret header here
   origin {
     domain_name = data.kubernetes_ingress_v1.me_website_app.status[0].load_balancer[0].ingress[0].hostname
-    origin_id   = "app-origin"
+    origin_id   = "me-website-app-origin"
+
+    connection_attempts = 3
+    connection_timeout  = 10
 
     custom_origin_config {
       http_port              = 80
@@ -74,7 +92,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   # Static files origin (S3)
   origin {
     domain_name              = local.s3_origins.static.bucket_domain
-    origin_id                = "static-origin"
+    origin_id                = "me-website-static-origin"
     origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["static"].id
 
   }
@@ -82,7 +100,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   # Error pages origin (S3)
   origin {
     domain_name              = local.s3_origins.error_pages.bucket_domain
-    origin_id                = "error-pages-origin"
+    origin_id                = "me-website-error-pages-origin"
     origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["error_pages"].id
   }
 
@@ -107,7 +125,7 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id          = data.aws_cloudfront_cache_policy.app_cache.id
+    cache_policy_id          = data.aws_cloudfront_cache_policy.policies["app_cache"].id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.app_request.id
 
     compress  = true
@@ -135,7 +153,7 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id            = data.aws_cloudfront_cache_policy.static_cache.id
+    cache_policy_id            = data.aws_cloudfront_cache_policy.policies["static_cache"].id
     response_headers_policy_id = data.aws_cloudfront_response_headers_policy.static_headers.id
 
     compress   = true
@@ -160,7 +178,7 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id = data.aws_cloudfront_cache_policy.error_cache.id
+    cache_policy_id = data.aws_cloudfront_cache_policy.policies["error_cache"].id
 
     compress   = true
     min_ttl    = 0

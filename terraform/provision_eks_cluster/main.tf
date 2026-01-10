@@ -70,6 +70,10 @@ data "aws_route53_zone" "iplayishow" {
   name = "${trimsuffix(var.domain_name, ".")}."
 }
 
+data "aws_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 data "external" "my_ip" {
   program = [
     "bash",
@@ -325,9 +329,9 @@ module "efs" {
   tags = local.tags
 }
 
-###############################################################
+##################################################################
 # SECURITY GROUPS — ALB, Fargate, RDS, Lambda, EKS Primary, EFS
-###############################################################
+##################################################################
 
 # SG for Fargate app pods
 module "fargate_app_sg" {
@@ -355,14 +359,14 @@ module "alb_security_group" {
   version = "~> 5.3"
 
   name        = "${local.cluster_name}-alb-sg"
-  description = "Security group for internal ALB with CloudFront VPC Origin"
+  description = "Security group for public ALB only reachable from CloudFront"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_with_cidr_blocks = [
+  ingress_with_prefix_list_ids = [
     {
-      rule        = "https-443-tcp"
-      cidr_blocks = module.vpc.vpc_cidr_block
-      description = "CloudFront VPC Origin ENIs to ALB"
+      rule            = "https-443-tcp"
+      prefix_list_ids = data.aws_prefix_list.cloudfront_origin_facing.id
+      description     = "CloudFront edge to ALB"
     }
   ]
 
@@ -370,7 +374,7 @@ module "alb_security_group" {
     {
       rule        = "http-80-tcp"
       cidr_blocks = module.vpc.vpc_cidr_block
-      description = "ALB to EKS pods"
+      description = "ALB to EKS nodes/pods"
     }
   ]
 
