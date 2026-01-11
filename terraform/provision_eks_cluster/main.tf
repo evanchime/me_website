@@ -68,6 +68,7 @@ data "aws_availability_zones" "available" {
 
 data "aws_route53_zone" "iplayishow" {
   name = "${trimsuffix(var.domain_name, ".")}."
+  private_zone = false
 }
 
 data "aws_prefix_list" "cloudfront_origin_facing" {
