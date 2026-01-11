@@ -37,36 +37,17 @@ provider "helm" {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
-data "kubernetes_config_map" "aws_auth" {
-  metadata {
-    name      = "aws-auth"
-    namespace = "kube-system"
-  }
+locals {
+  me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
 }
+
+data "aws_caller_identity" "current" {}
 
 data "kubernetes_ingress_v1" "me_website_app" {
   metadata {
     name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
     namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
   }
-}
-
-
-locals {
-  existing_map_roles = (
-    try(yamldecode(data.kubernetes_config_map.aws_auth.data["mapRoles"]), [])
-  )
-  lambda_map_role = {
-    rolearn  = module.cloudfront_secret_rotation_lambda_role.arn
-    username = module.cloudfront_secret_rotation_lambda_role.arn
-    groups   = ["lambda-ingress-patcher"]
-  }
-  merged_map_roles = distinct(
-    concat(local.existing_map_roles, [local.lambda_map_role])
-  )
-  me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
 }
 
 module "tfc_rbac_app" {
@@ -83,17 +64,6 @@ module "tfc_rbac_app" {
 
   tfc_kubernetes_audience           = var.tfc_kubernetes_audience
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
-}
-
-resource "kubernetes_config_map" "aws_auth_merged" {
-  metadata {
-    name      = "aws-auth"
-    namespace = "kube-system"
-  }
-
-  data = {
-    mapRoles = yamlencode(local.merged_map_roles)
-  }
 }
 
 # Service account for me_website application
@@ -177,6 +147,24 @@ resource "kubernetes_deployment_v1" "me_website" {
       spec {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
 
+        volume {
+          name = "db-secrets"
+          csi {
+            driver           = "secrets-store.csi.k8s.io"
+            read_only        = true
+            volume_attributes = {
+              secretProviderClass = "me-website-db"
+            }
+          }
+        }
+
+        volume {
+          name = "efs-volume"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.efs_pvc.metadata[0].name
+          }
+        }
+
         container {
           name  = "me-website"
           image = local.me_website_image
@@ -185,17 +173,50 @@ resource "kubernetes_deployment_v1" "me_website" {
             container_port = 8000
           }
 
-          env {
-            name  = "DATABASE_HOST"
-            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db.endpoint
+          volume_mount {
+            name       = "db-secrets"
+            mount_path = "/var/secrets/db"
+            read_only  = true
           }
+
           env {
-            name  = "DATABASE_USER"
-            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db.username
+            name = "DATABASE_HOST"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "host"
+              }
+            }
           }
+
           env {
-            name  = "DATABASE_PASSWORD"
-            value = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_password
+            name = "DATABASE_USER"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "username"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "password"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_NAME"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "database"
+              }
+            }
           }
 
           liveness_probe {
@@ -221,14 +242,56 @@ resource "kubernetes_deployment_v1" "me_website" {
             mount_path = "/app/media"
           }
         }
-
-        volume {
-          name = "efs-volume"
-          persistent_volume_claim {
-            claim_name = kubernetes_persistent_volume_claim.efs_pvc.metadata[0].name
-          }
-        }
       }
+    }
+  }
+}
+
+resource "kubernetes_manifest" "me_website_db_secretproviderclass" {
+  manifest = {
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+
+    metadata = {
+      name      = "me-website-db"
+      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+    }
+
+    spec = {
+      provider = "aws"
+
+      parameters = {
+        objects = <<EOF
+- objectName: "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret}"
+  objectType: "secretsmanager"
+EOF
+      }
+
+      secretObjects = [
+        {
+            secretName = "me-website-db"
+            type       = "Opaque"
+            data = [
+                {
+                    objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret
+                    key        = "host"
+                },
+                {
+                    objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret
+                    key        = "username"
+                },
+                {
+                    objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret
+                    key        = "password"
+                },
+                {
+                    objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret
+                    key        = "database"
+                }
+            ]
+        }
+     ]
+      
     }
   }
 }
@@ -253,40 +316,32 @@ resource "kubernetes_service_v1" "me_website" {
   }
 }
 
-resource "kubernetes_manifest" "lambda_ingress_patcher_role" {
+resource "kubernetes_manifest" "letsencrypt_prod_clusterissuer" {
   manifest = {
-    apiVersion = "rbac.authorization.k8s.io/v1"
-    kind       = "Role"
+    apiVersion = "cert-manager.io/v1"
+    kind       = "ClusterIssuer"
     metadata = {
-      name      = "ingress-patching-role"
-      namespace = "me_website-app"
+      name = "letsencrypt-prod"
     }
-    rules = [{
-      apiGroups = ["networking.k8s.io"]
-      resources = ["ingresses"]
-      verbs     = ["get", "patch"]
-    }]
-  }
-}
-
-resource "kubernetes_manifest" "lambda_ingress_patcher_rolebinding" {
-  manifest = {
-    apiVersion = "rbac.authorization.k8s.io/v1"
-    kind       = "RoleBinding"
-    metadata = {
-      name      = "ingress-patching-rolebinding"
-      namespace = "me_website-app"
+    spec = {
+      acme = {
+        email  = var.me_website_email
+        server = "https://acme-v02.api.letsencrypt.org/directory"
+        privateKeySecretRef = {
+          name = "letsencrypt-prod-key"
+        }
+        solvers = [
+          {
+            dns01 = {
+              route53 = {
+                region       = "eu-west-2"
+                hostedZoneID = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
+              }
+            }
+          }
+        ]
+      }
     }
-    roleRef = {
-      apiGroup = "rbac.authorization.k8s.io"
-      kind     = "Role"
-      name     = "ingress-patching-role"
-    }
-    subjects = [{
-      kind = "User"
-      name = module.cloudfront_secret_rotation_lambda_role.arn
-      apiGroup = "rbac.authorization.k8s.io"
-    }]
   }
 }
 
@@ -303,23 +358,36 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
         "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTPS" = 443 }])
+        "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
       }
     }
     spec = {
-      rules = [{
-        http = {
-          paths = [{
-            path     = "/"
-            pathType = "Prefix"
-            backend = {
-              service = {
-                name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_service_name
-                port = { number = 8000 }
-              }
-            }
-          }]
+      tls = [
+        {
+            hosts      = ["app.iplayishow.com"]
+            secretName = "app-iplayishow-com-tls"
         }
-      }]
+      ]
+
+      rules = [
+        {
+            host = "app.iplayishow.com"
+            http = {
+                paths = [
+                    {
+                        path     = "/"
+                        pathType = "Prefix"
+                        backend = {
+                            service = {
+                                name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_service_name
+                                port = { number = 8000 }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+      ]
     }
   }
 

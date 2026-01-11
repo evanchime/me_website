@@ -54,3 +54,9 @@ variable "tfc_kubernetes_dynamic_credentials" {
     }))
   })
 }
+
+variable "me_website_email" {
+    description = "Email address for me_website application admin"
+    type        = string
+    default = "evanchime@yahoo.co.uk"
+}

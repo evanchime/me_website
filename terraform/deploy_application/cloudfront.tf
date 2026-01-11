@@ -18,6 +18,11 @@ locals {
       name = "Managed-CachingDisabled"
     }
   }
+  cf_aliases = [
+    "iplayishow.com",
+    "www.iplayishow.com",
+    "static.iplayishow.com",
+  ]
 }
 
 data "aws_cloudfront_cache_policy" "policies" {
@@ -32,7 +37,7 @@ data "aws_cloudfront_cache_policy" "policies" {
 
 data "aws_acm_certificate" "cloudfront_cert" {
   provider = aws.us_east_1
-  domain   = "iplayishow.com"
+  domain   = "*.iplayishow.com"
   statuses = ["ISSUED"]
   most_recent = true
 }
@@ -255,4 +260,32 @@ resource "aws_cloudfront_distribution" "me_website" {
 
   retain_on_delete      = false
   wait_for_deployment   = true
+}
+
+resource "aws_route53_record" "cf_alias_a" {
+  for_each = toset(local.cf_aliases)
+
+  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  name    = each.value
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.me_website.domain_name
+    zone_id                = aws_cloudfront_distribution.me_website.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "cf_alias_aaaa" {
+  for_each = toset(local.cf_aliases)
+
+  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  name    = each.value
+  type    = "AAAA"
+
+  alias {
+    name                   = aws_cloudfront_distribution.me_website.domain_name
+    zone_id                = aws_cloudfront_distribution.me_website.hosted_zone_id
+    evaluate_target_health = false
+  }
 }

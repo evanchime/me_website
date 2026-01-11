@@ -111,3 +111,7 @@ output "me_website_app_kubernetes_namespace" {
 output "alb_security_group_id" {
   value = module.alb_security_group.security_group_id
 }
+
+output "me_website_k8s_db_secret" {
+  value = aws_secretsmanager_secret.rds_master_credentials.name
+}
