@@ -100,6 +100,10 @@ output "me_website_k8s_db_password" {
   sensitive = true
 }
 
+output "me_website_k8s_db_name" {
+  value = aws_db_instance.me_website_k8s_db.db_name
+}
+
 output "me_website_k8s_db_security_group_id" {
   value = module.rds_security_group.security_group_id
 }
