@@ -55,8 +55,32 @@ variable "tfc_kubernetes_dynamic_credentials" {
   })
 }
 
-variable "me_website_email" {
+variable "me_website_email_host_user" {
     description = "Email address for me_website application admin"
     type        = string
-    default = "evanchime@yahoo.co.uk"
+    default = "evanchime@gmail.com"
+}
+
+variable "health_check_secret" {
+  description = "Secret string for health check endpoint"
+  type        = string
+  sensitive   = true
+}
+
+variable "me_website_email_host_password" {
+    description = "App password for me_website application admin email"
+    type        = string
+    sensitive   = true
+}
+
+variable "secret_admin_url" {
+    description = "Secret admin URL for me_website application"
+    type        = string
+    sensitive   = true
+}
+
+variable "me_website_django_secret_key" {
+    description = "Django secret key for me_website application"
+    type        = string
+    sensitive   = true
 }
