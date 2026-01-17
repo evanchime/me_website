@@ -119,6 +119,10 @@ resource "kubernetes_persistent_volume_claim" "efs_pvc" {
 }
 
 resource "kubernetes_deployment_v1" "me_website" {
+  depends_on = [
+    kubernetes_manifest.me_website_secrets_provider_class
+  ]
+
   metadata {
     name      = "me-website"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -314,6 +318,258 @@ resource "kubernetes_deployment_v1" "me_website" {
               memory = "1Gi"
             }
           }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_job_v1" "me_website_migrate" {
+  depends_on = [
+    kubernetes_manifest.me_website_secrets_provider_class
+  ]
+
+  metadata {
+    name      = "me-website-migrate"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+
+    labels = {
+      job = "me-website-migrate"
+    }
+  }
+
+  spec {
+    template {
+      metadata {
+        labels = {
+          job = "me-website-migrate"
+        }
+      }
+
+      spec {
+        service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
+        restart_policy       = "OnFailure"
+
+        # -----------------------------
+        # Volumes
+        # -----------------------------
+        volume {
+          name = "secrets-volume"
+
+          csi {
+            driver    = "secrets-store.csi.k8s.io"
+            read_only = true
+            volume_attributes = {
+              secretProviderClass = "me-website-secrets"
+            }
+          }
+        }
+
+        # -----------------------------
+        # Container
+        # -----------------------------
+        container {
+          name  = "migrate"
+          image = local.me_website_image
+
+          image_pull_policy = "IfNotPresent"
+
+          # Volume mounts
+          volume_mount {
+            name       = "secrets-volume"
+            mount_path = "/var/secrets/app"
+            read_only  = true
+          }
+
+          # envFrom: ConfigMap + Secret
+          env_from {
+            config_map_ref {
+              name = "me-website-config"
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = "me-website-app-secrets"
+            }
+          }
+
+          # DB env vars from synced Secret
+          env {
+            name = "DATABASE_HOST"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "host"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_USER"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "username"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "password"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_PORT"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "port"
+              }
+            }
+          }
+
+          # Construct DATABASE_URL
+          env {
+            name  = "DATABASE_URL"
+            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_db_name}?sslmode=require"
+          }
+
+          # Command + args
+          command = ["python3", "manage.py"]
+          args    = ["migrate", "--noinput"]
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_job_v1" "me_website_collectstatic" {
+  depends_on = [
+    kubernetes_manifest.me_website_secrets_provider_class
+  ]
+  
+  metadata {
+    name      = "me-website-collectstatic"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+
+    labels = {
+      job = "me-website-collectstatic"
+    }
+  }
+
+  spec {
+    template {
+      metadata {
+        labels = {
+          job = "me-website-collectstatic"
+        }
+      }
+
+      spec {
+        service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
+        restart_policy       = "OnFailure"
+
+        # -----------------------------
+        # Volumes
+        # -----------------------------
+        volume {
+          name = "secrets-volume"
+
+          csi {
+            driver       = "secrets-store.csi.k8s.io"
+            read_only    = true
+            volume_attributes = {
+              secretProviderClass = "me-website-secrets"
+            }
+          }
+        }
+
+        # -----------------------------
+        # Container
+        # -----------------------------
+        container {
+          name  = "collectstatic"
+          image = local.me_website_image
+
+          image_pull_policy = "IfNotPresent"
+
+          # Volume mounts
+          volume_mount {
+            name       = "secrets-volume"
+            mount_path = "/var/secrets/app"
+            read_only  = true
+          }
+
+          # envFrom: ConfigMap + Secret
+          env_from {
+            config_map_ref {
+              name = "me-website-config"
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = "me-website-app-secrets"
+            }
+          }
+
+          # DB env vars from synced Secret
+          env {
+            name = "DATABASE_HOST"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "host"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_USER"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "username"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "password"
+              }
+            }
+          }
+
+          env {
+            name = "DATABASE_PORT"
+            value_from {
+              secret_key_ref {
+                name = "me-website-db"
+                key  = "port"
+              }
+            }
+          }
+
+          # Construct DATABASE_URL
+          env {
+            name  = "DATABASE_URL"
+            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_db_name}?sslmode=require"
+          }
+
+          # Command + args
+          command = ["python3", "manage.py"]
+          args    = ["collectstatic", "--noinput", "--clear"]
         }
       }
     }
