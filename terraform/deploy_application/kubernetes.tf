@@ -339,6 +339,11 @@ resource "kubernetes_job_v1" "me_website_migrate" {
   }
 
   spec {
+    parallelism                = 1
+    completions                = 1
+    backoff_limit              = 1
+    ttl_seconds_after_finished = 86400
+
     template {
       metadata {
         labels = {
@@ -465,6 +470,11 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
   }
 
   spec {
+    parallelism                = 1
+    completions                = 1
+    backoff_limit              = 1
+    ttl_seconds_after_finished = 86400
+
     template {
       metadata {
         labels = {
@@ -497,7 +507,6 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
         container {
           name  = "collectstatic"
           image = local.me_website_image
-
           image_pull_policy = "IfNotPresent"
 
           # Volume mounts
