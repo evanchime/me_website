@@ -84,3 +84,33 @@ variable "me_website_django_secret_key" {
     type        = string
     sensitive   = true
 }
+
+variable "me_website_django_settings_module" {
+  type        = string
+  description = "Django settings module for the application"
+  default     = "me_website_project.settings"
+}
+
+variable "me_website_debug_mode" {
+  type        = bool
+  description = "Enable or disable Django debug mode"
+  default     = false
+}
+
+variable "me_website_allowed_hosts" {
+  type        = string
+  description = "Comma-separated list of allowed hosts"
+  default     = ".iplayishow.com,localhost,127.0.0.1"
+}
+
+variable "me_website_csrf_trusted_origins" {
+  type        = string
+  description = "Comma-separated list of CSRF trusted origins"
+  default     = "https://app.iplayishow.com,https://iplayishow.com,https://www.iplayishow.com"
+}
+
+variable "me_website_app_version" {
+  type        = string
+  description = "Application version identifier"
+  default     = "1.0.0"
+}
