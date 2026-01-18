@@ -37,7 +37,7 @@ module "tfc_rbac_app" {
   source = "../modules/tfc-rbac"
 
   mode            = "application"
-  cluster_name    = module.eks.cluster_name
+  cluster_name    = data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_name
   target_namespace = "me-website-app"
 
   tfc_hostname  = var.tfc_hostname
