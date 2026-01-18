@@ -265,7 +265,7 @@ resource "aws_cloudfront_distribution" "me_website" {
 resource "aws_route53_record" "cf_alias_a" {
   for_each = toset(local.cf_aliases)
 
-  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  zone_id = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
   name    = each.value
   type    = "A"
 
@@ -279,7 +279,7 @@ resource "aws_route53_record" "cf_alias_a" {
 resource "aws_route53_record" "cf_alias_aaaa" {
   for_each = toset(local.cf_aliases)
 
-  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  zone_id = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
   name    = each.value
   type    = "AAAA"
 
