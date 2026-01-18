@@ -600,6 +600,7 @@ resource "aws_secretsmanager_secret_version" "me_website_app_secrets_version" {
     AWS_STORAGE_BUCKET_NAME      = aws_s3_bucket.buckets["static"].bucket
     AWS_S3_CUSTOM_DOMAIN         = "static.iplayishow.com"
     AWS_S3_REGION_NAME           = "eu-west-2"
+    HEALTH_CHECK_SECRET          = var.health_check_secret
   })
 }
 
@@ -610,12 +611,11 @@ resource "kubernetes_config_map_v1" "me_website_config" {
   }
 
   data = {
-    DJANGO_SETTINGS_MODULE = "me_website_project.settings"
-    DEBUG                  = "False"
-    ALLOWED_HOSTS          = ".iplayishow.com,localhost,127.0.0.1"
-    CSRF_TRUSTED_ORIGINS   = "https://app.iplayishow.com,https://iplayishow.com,https://www.iplayishow.com,https://${aws_cloudfront_distribution.me_website.domain_name}"
-    APP_VERSION            = "1.0.0"
-    HEALTH_CHECK_SECRET    = var.health_check_secret
+    DJANGO_SETTINGS_MODULE = var.me_website_django_settings_module
+    DEBUG                  = tostring(var.me_website_debug_mode)
+    ALLOWED_HOSTS          = var.me_website_allowed_hosts
+    CSRF_TRUSTED_ORIGINS   = "${var.me_website_csrf_trusted_origins},https://${aws_cloudfront_distribution.me_website.domain_name}"
+    APP_VERSION            = var.me_website_app_version
   }
 }
 
@@ -659,6 +659,7 @@ EOF
             { objectName = "me-website-app-secrets", key = "AWS_STORAGE_BUCKET_NAME" },
             { objectName = "me-website-app-secrets", key = "AWS_S3_REGION_NAME" },
             { objectName = "me-website-app-secrets", key = "AWS_S3_CUSTOM_DOMAIN" },
+            { objectName = "me-website-app-secrets", key = "HEALTH_CHECK_SECRET" },
           ]
         }
       ]
