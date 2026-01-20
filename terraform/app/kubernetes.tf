@@ -650,7 +650,7 @@ EOF
   }
 }
 
-resource "kubernetes_service_v1" "me_website" {
+resource "kubernetes_service_v1" "me_website_app_service" {
   metadata {
     name      = "me-website-app-service"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -662,7 +662,7 @@ resource "kubernetes_service_v1" "me_website" {
     }
 
     port {
-      port        = 8000
+      port        = 80
       target_port = 8000
     }
 
@@ -733,7 +733,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
                         pathType = "Prefix"
                         backend = {
                             service = {
-                                name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_service_name
+                                name = kubernetes_service_v1.me_website_app_service.metadata[0].name
                                 port = { number = 8000 }
                             }
                         }
@@ -762,6 +762,7 @@ resource "kubernetes_manifest" "fargate_sg_policy" {
     }
     spec = {
       podSelector = {
+        
         matchLabels = {
           app = "me-website"
         }

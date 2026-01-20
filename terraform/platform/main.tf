@@ -3,7 +3,7 @@
 ###############################################
 
 provider "aws" {
-  region = var.region
+  region = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.region
 }
 
 data "aws_eks_cluster" "cluster" {
@@ -26,7 +26,7 @@ provider "helm" {
 
 locals {
   # Unique cluster name with random suffix
-  cluster_name        = "meweb-eks"
+  cluster_name        = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.cluster_name
 
   # Common tags applied to all resources
   tags = {
@@ -35,9 +35,6 @@ locals {
     Terraform   = "true"
   }
   
-  # Current IP for EKS API access
-  my_ip_cidr = "${data.external.my_ip.result.ip}/32"
-
 }
 
 # Random strings for naming
@@ -59,30 +56,6 @@ resource "random_string" "prefix" {
 
 data "aws_caller_identity" "current" {}
 
-data "aws_availability_zones" "available" {
-  filter {
-    name   = "opt-in-status"
-    values = ["opt-in-not-required"]
-  }
-}
-
-data "aws_route53_zone" "iplayishow" {
-  name = "${trimsuffix(var.domain_name, ".")}."
-  private_zone = false
-}
-
-data "aws_prefix_list" "cloudfront_origin_facing" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
-}
-
-data "external" "my_ip" {
-  program = [
-    "bash",
-    "-c",
-    "echo '{\"ip\": \"'$(curl -s https://checkip.amazonaws.com)'\"}'"
-  ]
-}
-
 ###############################################
 # CONFIGURE K8S OIDC RBAC FOR THIS WORKSPACE 
 ###############################################
@@ -101,41 +74,6 @@ module "tfc_rbac_platform" {
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
-#######################################################
-# VPC — Networking foundation for EKS, Lambda, and RDS
-#######################################################
-
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "6.5"
-
-  name = "me_website-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
-
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
-
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
-  enable_dns_hostnames = true
-
-  # Required for EKS load balancers
-  public_subnet_tags = {
-    "kubernetes.io/role/elb" = 1
-  }
-
-  # Required for EKS Fargate + VPC CNI
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = 1
-    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
-    "kubernetes.io/role/pod-eni" = "1"
-  }
-
-  tags = local.tags
-}
-
 #######################################################################################
 # EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + App FARGATE PROFILE
 #######################################################################################
@@ -152,7 +90,7 @@ module "fargate_me_website" {
 
   cluster_name = module.eks.cluster_name
   name         = "fp-me-website"
-  subnet_ids   = module.vpc.private_subnets
+  subnet_ids   = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
 
   selectors = [
     {
@@ -208,8 +146,8 @@ module "eks" {
     }
   }
 
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
+  vpc_id     = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
 
   #########################################
   # Fargate profiles — system namespaces
@@ -218,7 +156,7 @@ module "eks" {
   fargate_profiles = {
     system = {
       name       = "fp-system"
-      subnet_ids = module.vpc.private_subnets
+      subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
       selectors = [
         { namespace = "kube-system" },
         { namespace = "default" }
@@ -226,7 +164,7 @@ module "eks" {
     }
     cert_manager = {
         name       = "fp-cert-manager"
-        subnet_ids = module.vpc.private_subnets
+        subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
         selectors = [
             { namespace = "cert-manager" }
         ]
@@ -275,7 +213,7 @@ module "eks_blueprints_addons" {
   
 
   cert_manager_route53_hosted_zone_arns = [
-    data.aws_route53_zone.iplayishow.arn
+    data.terraform_remote_state.me_website_k8s_global_and_network.outputs.route53_arn
   ]
 
   tags = local.tags
@@ -297,15 +235,15 @@ module "efs" {
   # One mount target per private subnet
   mount_targets = {
     ap1 = {
-        subnet_id       = module.vpc.private_subnets[0]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[0]
         security_groups = [module.efs_security_group.security_group_id]
     }
     ap2 = {
-        subnet_id       = module.vpc.private_subnets[1]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[1]
         security_groups = [module.efs_security_group.security_group_id]
     }
     ap3 = {
-        subnet_id       = module.vpc.private_subnets[2]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[2]
         security_groups = [module.efs_security_group.security_group_id]
     }
  }
@@ -341,7 +279,15 @@ module "fargate_app_sg" {
 
   name        = "${local.cluster_name}-fargate-app-sg"
   description = "Security group for app pods on Fargate"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+
+  ingress_with_source_security_group_id = [
+    {
+        rule                     = "http-80-tcp"
+        source_security_group_id = module.alb_security_group.security_group_id
+        description              = "From ALB to me_website pods"
+    }
+  ]
 
   egress_with_cidr_blocks = [
     {
@@ -361,12 +307,12 @@ module "alb_security_group" {
 
   name        = "${local.cluster_name}-alb-sg"
   description = "Security group for public ALB only reachable from CloudFront"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
 
   ingress_with_prefix_list_ids = [
     {
       rule            = "https-443-tcp"
-      prefix_list_ids = data.aws_prefix_list.cloudfront_origin_facing.id
+      prefix_list_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.cloudfront_origin_facing_prefix_list_id
       description     = "CloudFront edge to ALB"
     }
   ]
@@ -374,7 +320,7 @@ module "alb_security_group" {
   egress_with_cidr_blocks = [
     {
       rule        = "http-80-tcp"
-      cidr_blocks = module.vpc.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
       description = "ALB to EKS nodes/pods"
     }
   ]
@@ -389,7 +335,7 @@ module "rds_security_group" {
 
   name        = "${local.cluster_name}-rds-sg"
   description = "Security group for the RDS instance"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [
     {
@@ -414,7 +360,7 @@ module "eks_primary_security_group" {
 
   name               = "${local.cluster_name}-primary-sg"
   description        = "EKS cluster security group"
-  vpc_id             = module.vpc.vpc_id
+  vpc_id             = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
   security_group_id  = module.eks.cluster_primary_security_group_id
 
   ingress_with_source_security_group_id = [
@@ -438,12 +384,12 @@ module "eks_primary_security_group" {
     },
     {
       rule        = "dns-udp"
-      cidr_blocks = module.vpc.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
       description = "DNS resolution"
     },
     {
       rule        = "dns-tcp"
-      cidr_blocks = module.vpc.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
       description = "DNS resolution"
     }
   ]
@@ -458,7 +404,7 @@ module "efs_security_group" {
 
   name        = "${local.cluster_name}-efs-sg"
   description = "Security group for EFS filesystem"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [ 
     {
@@ -477,7 +423,7 @@ module "efs_security_group" {
 
 resource "aws_db_subnet_group" "me_website_rds" {
   name       = "me_website-rds"
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
   tags       = local.tags
 }
 
@@ -594,12 +540,7 @@ data "aws_iam_policy_document" "me_website_app" {
       "s3:DeleteObject",
       "s3:ListBucket"
     ]
-    resources = [
-      "arn:aws:s3:::me-website-bucket",
-      "arn:aws:s3:::me-website-bucket/*",
-      "arn:aws:s3:::me-website-static-error-pages-bucket",
-      "arn:aws:s3:::me-website-static-error-pages-bucket/*"
-    ]
+    resources = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.s3_bucket_resources
   }
 
   statement {
@@ -725,7 +666,7 @@ module "rds_lambda_security_group" {
 
   name        = "${local.cluster_name}-lambda-rds-sg"
   description = "Security group for the RDS instance"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
 
   # Allow Lambda → RDS
   egress_with_source_security_group_id = [
@@ -825,7 +766,7 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
 
   # Lambda runs inside the VPC to reach RDS
   vpc_config {
-    subnet_ids         = module.vpc.private_subnets
+    subnet_ids         = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
     security_group_ids = [module.rds_lambda_security_group.security_group_id]
   }
 
