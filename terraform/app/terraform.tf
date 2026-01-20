@@ -1,4 +1,13 @@
 terraform {
+
+  cloud {
+    organization = "DevOps_As_A_Way"
+    workspaces {
+    project = "k8s-migration"
+    name = "k8s-migration-app"
+    }
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -13,4 +22,6 @@ terraform {
       version = ">= 2.9.0"
     }
   }
+
+  required_version = "~> 1.3"
 }
