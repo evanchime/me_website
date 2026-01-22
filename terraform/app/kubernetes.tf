@@ -246,26 +246,24 @@ resource "kubernetes_deployment_v1" "me_website" {
           # Probes: Startup, Readiness, Liveness
           # -----------------------------
           startup_probe {
-            http_get {
-              path = "/ht/"
-              port = 8000
-              http_header {
-                name  = "X-Health-Check-Secret"
-                value = var.health_check_secret
-              }
+            exec {
+                command = [
+                    "sh",
+                    "-c",
+                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+                ]
             }
             period_seconds    = 10
             failure_threshold = 30
           }
 
           readiness_probe {
-            http_get {
-              path = "/ht/"
-              port = 8000
-              http_header {
-                name  = "X-Health-Check-Secret"
-                value = var.health_check_secret
-              }
+            exec {
+                command = [
+                    "sh",
+                    "-c",
+                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+                ]
             }
             initial_delay_seconds = 20
             period_seconds        = 10
@@ -274,13 +272,12 @@ resource "kubernetes_deployment_v1" "me_website" {
           }
 
           liveness_probe {
-            http_get {
-              path = "/ht/"
-              port = 8000
-              http_header {
-                name  = "X-Health-Check-Secret"
-                value = var.health_check_secret
-              }
+            exec {
+                command = [
+                    "sh",
+                    "-c",
+                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+                ]
             }
             initial_delay_seconds = 60
             period_seconds        = 30
@@ -569,7 +566,7 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
 }
 
 resource "aws_secretsmanager_secret" "me_website_app_secrets" {
-  name        = "me-website-app-secrets"
+  name        = "me-website/prod/secrets"
   description = "Application secrets for the me-website Django app"
 }
 
@@ -602,7 +599,7 @@ resource "kubernetes_config_map_v1" "me_website_config" {
   }
 }
 
-resource "kubernetes_manifest" "me_website_secrets_provider_class" {
+resource "kubernetes_manifest" "me_website_secret_provider_class" {
   manifest = {
     apiVersion = "secrets-store.csi.x-k8s.io/v1"
     kind       = "SecretProviderClass"
@@ -613,36 +610,129 @@ resource "kubernetes_manifest" "me_website_secrets_provider_class" {
     spec = {
       provider = "aws"
       parameters = {
-        objects = <<EOF
-- objectName: "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret}"
-  objectType: "secretsmanager"
-- objectName: "me-website-app-secrets"
-  objectType: "secretsmanager"
-EOF
+        objects = jsonencode([
+          {
+            objectName = "me-website/prod/secrets"
+            objectType = "secretsmanager"
+            jmesPath = [
+              {
+                path  = "ME_WEBSITE_DJANGO_SECRET_KEY"
+                objectAlias = "ME_WEBSITE_DJANGO_SECRET_KEY"
+              },
+              {
+                path  = "SECRET_ADMIN_URL"
+                objectAlias = "SECRET_ADMIN_URL"
+              },
+              {
+                path  = "EMAIL_HOST_USER"
+                objectAlias = "EMAIL_HOST_USER"
+              },
+              {
+                path  = "EMAIL_HOST_PASSWORD"
+                objectAlias = "EMAIL_HOST_PASSWORD" 
+              },
+              {
+                path  = "AWS_STORAGE_BUCKET_NAME"
+                objectAlias = "AWS_STORAGE_BUCKET_NAME"
+              },
+              {
+                path  = "AWS_S3_CUSTOM_DOMAIN"
+                objectAlias = "AWS_S3_CUSTOM_DOMAIN"
+              },
+              {
+                path  = "AWS_S3_REGION_NAME"
+                objectAlias = "AWS_S3_REGION_NAME"
+              },
+              {
+                path  = "HEALTH_CHECK_SECRET"
+                objectAlias = "HEALTH_CHECK_SECRET"
+              },
+            ]
+          },
+          {
+            objectName = "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret}"
+            objectType = "secretsmanager"
+            jmesPath = [
+              {
+                path  = "host"
+                objectAlias = "host"
+              },
+              {
+                path  = "username"
+                objectAlias = "username"
+              },
+              {
+                path  = "password"
+                objectAlias = "password"
+              },
+              {
+                path  = "port"
+                objectAlias = "port"
+              },
+            ]
+          }
+        ])
       }
+      # The secretObjects block to create a standard K8s Secret
       secretObjects = [
-        {
-          secretName = "me-website-db"
-          type       = "Opaque"
-          data = [
-            { objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret, key = "host" },
-            { objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret, key = "username" },
-            { objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret, key = "password" },
-            { objectName = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret, key = "port" },
-          ]
-        },
         {
           secretName = "me-website-app-secrets"
           type       = "Opaque"
           data = [
-            { objectName = "me-website-app-secrets", key = "ME_WEBSITE_DJANGO_SECRET_KEY" },
-            { objectName = "me-website-app-secrets", key = "SECRET_ADMIN_URL" },
-            { objectName = "me-website-app-secrets", key = "EMAIL_HOST_USER" },
-            { objectName = "me-website-app-secrets", key = "EMAIL_HOST_PASSWORD" },
-            { objectName = "me-website-app-secrets", key = "AWS_STORAGE_BUCKET_NAME" },
-            { objectName = "me-website-app-secrets", key = "AWS_S3_REGION_NAME" },
-            { objectName = "me-website-app-secrets", key = "AWS_S3_CUSTOM_DOMAIN" },
-            { objectName = "me-website-app-secrets", key = "HEALTH_CHECK_SECRET" },
+            {
+              key        = "ME_WEBSITE_DJANGO_SECRET_KEY"
+              objectName = "ME_WEBSITE_DJANGO_SECRET_KEY"
+            },
+            {
+              key        = "SECRET_ADMIN_URL"
+              objectName = "SECRET_ADMIN_URL"
+            },
+            {
+              key        = "EMAIL_HOST_USER"
+              objectName = "EMAIL_HOST_USER"
+            },
+            {
+              key        = "EMAIL_HOST_PASSWORD"
+              objectName = "EMAIL_HOST_PASSWORD"
+            },
+            {
+              key        = "AWS_STORAGE_BUCKET_NAME"
+              objectName = "AWS_STORAGE_BUCKET_NAME"
+            },
+            {
+              key        = "AWS_S3_CUSTOM_DOMAIN"
+              objectName = "AWS_S3_CUSTOM_DOMAIN"
+            },
+            {
+              key        = "AWS_S3_REGION_NAME"
+              objectName = "AWS_S3_REGION_NAME"
+            },
+            {
+              key        = "HEALTH_CHECK_SECRET"
+              objectName = "HEALTH_CHECK_SECRET"
+            }
+         ]
+        },
+        {
+          secretName = "me-website-db"
+          type       = "Opaque"
+          data = [
+            {
+              key        = "host"
+              objectName = "host"
+            },
+            {
+              key        = "username"
+              objectName = "username"
+            },
+            {
+              key        = "password"
+              objectName = "password"
+            },
+            {
+              key        = "port"
+              objectName = "port"
+            }
           ]
         }
       ]
