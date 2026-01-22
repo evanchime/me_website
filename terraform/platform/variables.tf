@@ -57,3 +57,9 @@ variable "tfc_kubernetes_audience" {
   type        = string
   default     = "kubernetes"
 }
+
+variable "me_website_email_host_user" {
+    description = "Email address for me_website application admin"
+    type        = string
+    default = "evanchime@gmail.com"
+}
