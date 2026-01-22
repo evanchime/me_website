@@ -670,35 +670,6 @@ resource "kubernetes_service_v1" "me_website_app_service" {
   }
 }
 
-resource "kubernetes_manifest" "letsencrypt_prod_clusterissuer" {
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "ClusterIssuer"
-    metadata = {
-      name = "letsencrypt-prod"
-    }
-    spec = {
-      acme = {
-        email  = var.me_website_email_host_user
-        server = "https://acme-v02.api.letsencrypt.org/directory"
-        privateKeySecretRef = {
-          name = "letsencrypt-prod-key"
-        }
-        solvers = [
-          {
-            dns01 = {
-              route53 = {
-                region       = "eu-west-2"
-                hostedZoneID = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
-              }
-            }
-          }
-        ]
-      }
-    }
-  }
-}
-
 resource "kubernetes_manifest" "me_website_app_ingress" {
   manifest = {
     apiVersion = "networking.k8s.io/v1"
@@ -839,7 +810,9 @@ resource "aws_lambda_function" "update_cloudfront_alb_origin" {
 
   environment {
     variables = {
-      cloudfront_distribution_id = aws_cloudfront_distribution.me_website.id
+      ALB_TARGET_ORIGIN_ID = data.terraform_remote_state.me_website_k8s_network.outputs.alb_target_origin_id
+      CLOUDFRONT_DISTRIBUTION_ID = data.terraform_remote_state.me_website_k8s_network.outputs.cloudfront_distribution_id
+      ALB_TARGET_PLACEHOLDER_DOMAIN = data.terraform_remote_state.me_website_k8s_network.outputs.alb_target_placeholder_domain_name
     }
   }
 }

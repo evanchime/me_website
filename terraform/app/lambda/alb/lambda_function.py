@@ -1,154 +1,92 @@
-import boto3  # type: ignore
+import boto3 #type: ignore
 import os
 import logging
 
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-CloudfrontClient = boto3.client('cloudfront')
+cloudfront = boto3.client("cloudfront")
 
+TARGET_ORIGIN_ID = os.environ["ALB_TARGET_ORIGIN_ID"]
+DISTRIBUTION_ID = os.environ["CLOUDFRONT_DISTRIBUTION_ID"]
+PLACEHOLDER_DOMAIN = os.environ.get(
+    "ALB_TARGET_PLACEHOLDER_DOMAIN", "placeholder.example.com"
+)
 
 def lambda_handler(event, context):
-    # Extract load balancer information
+    # Extract ALB DNS from EventBridge event
     try:
-        load_balancers = (
-            event.get('detail', {})
-            .get('responseElements', {})
-            .get('loadBalancers', [])
+        lb = (
+            event.get("detail", {})
+            .get("responseElements", {})
+            .get("loadBalancers", [])[0]
         )
-        
-        if not load_balancers:
-            logger.error(
-                "No load balancers found in event", 
-                extra={"event": event}
-            )
-            raise ValueError("No load balancers found in event")
-        
-        first_load_balancer = load_balancers[0]
-        load_balancer_name = first_load_balancer['loadBalancerName']
-        load_balancer_dns_name = first_load_balancer['DNSName']
-        
+        alb_dns = lb["DNSName"]
+
         logger.info(
-            "Successfully extracted load balancer details",
-            extra={
-                "loadBalancerName": load_balancer_name,
-                "DNSName": load_balancer_dns_name
-            }
+            "Extracted ALB DNS",
+            extra={"alb_dns": alb_dns, "event": event}
         )
-        
-    except KeyError as e:
-        logger.error(
-            f"Missing expected key in load balancer data: {e}", 
-            extra={"event": event}
-        )
-        raise
-    except (IndexError, TypeError, ValueError) as e:
-        logger.error(
-            f"Error processing event structure: {e}", 
-            extra={"event": event}
-        )
-        raise
-    
-    # Get CloudFront distribution ID from environment variable
-    distribution_id = os.environ['cloudfront_distribution_id']
-    
-    # Get current CloudFront distribution configuration
-    try:
-        response = CloudfrontClient.get_distribution_config(
-            Id=distribution_id
-        )
-        etag = response["ETag"]
-        distribution_config = response["DistributionConfig"]
-        
-        # Directly access the origins list
-        origins = distribution_config["Origins"]["Items"]
-        
-        # Look for the origin with exact match to load balancer name
-        origin_found = False
-        for origin in origins:
-            origin_id = origin["Id"]
-            
-            if origin_id == load_balancer_name:
-                logger.info(
-                    f"Found exact match for origin: {origin_id}",
-                    extra={
-                        "loadBalancerName": load_balancer_name,
-                        "originId": origin_id
-                    }
-                )
-                
-                # Check if update is actually needed
-                if origin["DomainName"] == load_balancer_dns_name:
-                    logger.info(
-                        f"No update needed. Domain already set to "
-                        f"{load_balancer_dns_name}"
-                    )
-                    return {
-                        'statusCode': 200,
-                        'body': (
-                            f'No update needed for CloudFront distribution '
-                            f'"{distribution_id}"'
-                        )
-                    }
-                
-                # Store old domain name for logging
-                old_domain = origin["DomainName"]
-                
-                # Update the domain name in the origin
-                origin["DomainName"] = load_balancer_dns_name
-                
-                logger.info(
-                    f"Updating origin domain from {old_domain} to "
-                    f"{load_balancer_dns_name}"
-                )
-                
-                # Update the distribution
-                CloudfrontClient.update_distribution(
-                    DistributionConfig=distribution_config,
-                    Id=distribution_id,
-                    IfMatch=etag
-                )
-                
-                logger.info(
-                    f"Successfully updated CloudFront distribution "
-                    f"{distribution_id}"
-                )
-                origin_found = True
-                break
-        
-        if not origin_found:
-            # Log all available origins for debugging
-            origin_ids = [origin["Id"] for origin in origins]
-            logger.error(
-                f"No origin found with ID exactly matching "
-                f"'{load_balancer_name}'",
-                extra={
-                    "expectedOriginId": load_balancer_name,
-                    "availableOriginIds": origin_ids,
-                    "distributionId": distribution_id
-                }
-            )
-            raise ValueError(
-                f"No origin found with ID '{load_balancer_name}'. "
-                f"Available origin IDs: {', '.join(origin_ids)}"
-            )
-            
-    except CloudfrontClient.exceptions.NoSuchDistribution:
-        logger.error(f"CloudFront distribution {distribution_id} not found")
-        raise
-    except CloudfrontClient.exceptions.PreconditionFailed:
-        logger.error(
-            f"ETag mismatch for distribution {distribution_id}. "
-            f"Configuration was modified concurrently."
-        )
-        raise
+
     except Exception as e:
         logger.error(
-            f"Error updating CloudFront distribution: {str(e)}",
-            extra={"distributionId": distribution_id}
+            "Failed to extract ALB DNS", 
+            extra={"error": str(e), "event": event}
         )
         raise
-    
+
+    # Fetch current CloudFront config
+    response = cloudfront.get_distribution_config(Id=DISTRIBUTION_ID)
+    etag = response["ETag"]
+    config = response["DistributionConfig"]
+
+    origins = config["Origins"]["Items"]
+
+    # Find the target origin
+    origin = next((o for o in origins if o["Id"] == TARGET_ORIGIN_ID), None)
+
+    if not origin:
+        origin_ids = [o["Id"] for o in origins]
+        logger.error(
+            "Target origin not found",
+            extra={"expected": TARGET_ORIGIN_ID, "available": origin_ids}
+        )
+        raise ValueError(f"Origin '{TARGET_ORIGIN_ID}' not found")
+
+    old_domain = origin["DomainName"]
+
+    # Determine if update is needed
+    if old_domain == alb_dns:
+        logger.info(
+            "No update needed; ALB DNS unchanged", 
+            extra={"alb_dns": alb_dns}
+        )
+        return {"statusCode": 200, "body": "No update needed"}
+
+    # First-time update (placeholder → real ALB DNS)
+    if old_domain == PLACEHOLDER_DOMAIN:
+        logger.info(
+            "Performing first-time ALB origin update",
+            extra={"old_domain": old_domain, "new_domain": alb_dns}
+        )
+    else:
+        logger.info(
+            "Updating ALB origin DNS",
+            extra={"old_domain": old_domain, "new_domain": alb_dns}
+        )
+
+    # Apply update
+    origin["DomainName"] = alb_dns
+
+    cloudfront.update_distribution(
+        Id=DISTRIBUTION_ID,
+        IfMatch=etag,
+        DistributionConfig=config
+    )
+
+    logger.info("CloudFront distribution updated successfully")
+
     return {
-        'statusCode': 200,
-        'body': f'Successfully updated CloudFront distribution {distribution_id}'
+        "statusCode": 200,
+        "body": f"Updated CloudFront origin to {alb_dns}"
     }

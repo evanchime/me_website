@@ -3,7 +3,7 @@
 ###############################################
 
 provider "aws" {
-  region = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.region
+  region = data.terraform_remote_state.me_website_k8s_network.outputs.region
 }
 
 data "aws_eks_cluster" "cluster" {
@@ -26,7 +26,7 @@ provider "helm" {
 
 locals {
   # Unique cluster name with random suffix
-  cluster_name        = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.cluster_name
+  cluster_name        = data.terraform_remote_state.me_website_k8s_network.outputs.cluster_name
 
   # Common tags applied to all resources
   tags = {
@@ -74,13 +74,42 @@ module "tfc_rbac_platform" {
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
-#######################################################################################
-# EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + App FARGATE PROFILE
-#######################################################################################
+########################################################################################################### 
+# EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + K8S CLUSTERISSUER +App FARGATE PROFILE
+###########################################################################################################
 
 resource "kubernetes_namespace_v1" "me_website_app" {
   metadata {
     name = "me-website-app"
+  }
+}
+
+resource "kubernetes_manifest" "letsencrypt_prod_clusterissuer" {
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "ClusterIssuer"
+    metadata = {
+      name = "letsencrypt-prod"
+    }
+    spec = {
+      acme = {
+        email  = var.me_website_email_host_user
+        server = "https://acme-v02.api.letsencrypt.org/directory"
+        privateKeySecretRef = {
+          name = "letsencrypt-prod-key"
+        }
+        solvers = [
+          {
+            dns01 = {
+              route53 = {
+                region       = "eu-west-2"
+                hostedZoneID = data.terraform_remote_state.me_website_k8s_network.outputs.route53_zone_id
+              }
+            }
+          }
+        ]
+      }
+    }
   }
 }
 
@@ -90,7 +119,7 @@ module "fargate_me_website" {
 
   cluster_name = module.eks.cluster_name
   name         = "fp-me-website"
-  subnet_ids   = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+  subnet_ids   = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
 
   selectors = [
     {
@@ -146,8 +175,8 @@ module "eks" {
     }
   }
 
-  vpc_id     = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
-  subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+  vpc_id     = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
+  subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
 
   #########################################
   # Fargate profiles — system namespaces
@@ -156,7 +185,7 @@ module "eks" {
   fargate_profiles = {
     system = {
       name       = "fp-system"
-      subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+      subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
       selectors = [
         { namespace = "kube-system" },
         { namespace = "default" }
@@ -164,7 +193,7 @@ module "eks" {
     }
     cert_manager = {
         name       = "fp-cert-manager"
-        subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+        subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
         selectors = [
             { namespace = "cert-manager" }
         ]
@@ -213,7 +242,7 @@ module "eks_blueprints_addons" {
   
 
   cert_manager_route53_hosted_zone_arns = [
-    data.terraform_remote_state.me_website_k8s_global_and_network.outputs.route53_arn
+    data.terraform_remote_state.me_website_k8s_network.outputs.route53_arn
   ]
 
   tags = local.tags
@@ -235,15 +264,15 @@ module "efs" {
   # One mount target per private subnet
   mount_targets = {
     ap1 = {
-        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[0]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[0]
         security_groups = [module.efs_security_group.security_group_id]
     }
     ap2 = {
-        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[1]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[1]
         security_groups = [module.efs_security_group.security_group_id]
     }
     ap3 = {
-        subnet_id       = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids[2]
+        subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[2]
         security_groups = [module.efs_security_group.security_group_id]
     }
  }
@@ -279,7 +308,7 @@ module "fargate_app_sg" {
 
   name        = "${local.cluster_name}-fargate-app-sg"
   description = "Security group for app pods on Fargate"
-  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [
     {
@@ -307,12 +336,12 @@ module "alb_security_group" {
 
   name        = "${local.cluster_name}-alb-sg"
   description = "Security group for public ALB only reachable from CloudFront"
-  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_prefix_list_ids = [
     {
       rule            = "https-443-tcp"
-      prefix_list_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.cloudfront_origin_facing_prefix_list_id
+      prefix_list_ids = data.terraform_remote_state.me_website_k8s_network.outputs.cloudfront_origin_facing_prefix_list_id
       description     = "CloudFront edge to ALB"
     }
   ]
@@ -320,7 +349,7 @@ module "alb_security_group" {
   egress_with_cidr_blocks = [
     {
       rule        = "http-80-tcp"
-      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
       description = "ALB to EKS nodes/pods"
     }
   ]
@@ -335,7 +364,7 @@ module "rds_security_group" {
 
   name        = "${local.cluster_name}-rds-sg"
   description = "Security group for the RDS instance"
-  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [
     {
@@ -360,7 +389,7 @@ module "eks_primary_security_group" {
 
   name               = "${local.cluster_name}-primary-sg"
   description        = "EKS cluster security group"
-  vpc_id             = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id             = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
   security_group_id  = module.eks.cluster_primary_security_group_id
 
   ingress_with_source_security_group_id = [
@@ -384,12 +413,12 @@ module "eks_primary_security_group" {
     },
     {
       rule        = "dns-udp"
-      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
       description = "DNS resolution"
     },
     {
       rule        = "dns-tcp"
-      cidr_blocks = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_cidr_block
+      cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
       description = "DNS resolution"
     }
   ]
@@ -404,7 +433,7 @@ module "efs_security_group" {
 
   name        = "${local.cluster_name}-efs-sg"
   description = "Security group for EFS filesystem"
-  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [ 
     {
@@ -423,7 +452,7 @@ module "efs_security_group" {
 
 resource "aws_db_subnet_group" "me_website_rds" {
   name       = "me_website-rds"
-  subnet_ids = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+  subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
   tags       = local.tags
 }
 
@@ -540,7 +569,7 @@ data "aws_iam_policy_document" "me_website_app" {
       "s3:DeleteObject",
       "s3:ListBucket"
     ]
-    resources = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.s3_bucket_resources
+    resources = data.terraform_remote_state.me_website_k8s_network.outputs.s3_bucket_resources
   }
 
   statement {
@@ -666,7 +695,7 @@ module "rds_lambda_security_group" {
 
   name        = "${local.cluster_name}-lambda-rds-sg"
   description = "Security group for the RDS instance"
-  vpc_id      = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.vpc_id
+  vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   # Allow Lambda → RDS
   egress_with_source_security_group_id = [
@@ -766,7 +795,7 @@ resource "aws_lambda_function" "rds_postgres_rotation" {
 
   # Lambda runs inside the VPC to reach RDS
   vpc_config {
-    subnet_ids         = data.terraform_remote_state.me_website_k8s_global_and_network.outputs.private_subnet_ids
+    subnet_ids         = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
     security_group_ids = [module.rds_lambda_security_group.security_group_id]
   }
 

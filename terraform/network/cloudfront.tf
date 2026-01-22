@@ -78,8 +78,8 @@ resource "aws_cloudfront_distribution" "me_website" {
 
   # App origin (ALB) – placeholder domain name
   origin {
-    domain_name = "placeholder.example.com"
-    origin_id   = "me-website-app-origin"
+    domain_name = var.alb_target_placeholder_domain_name
+    origin_id   = var.alb_target_origin_id
 
     connection_attempts = 3
     connection_timeout  = 10

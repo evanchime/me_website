@@ -13,6 +13,16 @@ output "cloudfront_distribution_id" {
   value       = aws_cloudfront_distribution.me_website.id
 }
 
+output "alb_target_origin_id" {
+  description = "The CloudFront origin ID for the ALB"
+  value       = var.alb_target_origin_id
+}
+
+output "alb_target_placeholder_domain_name" {
+  description = "The placeholder domain name of the ALB used as CloudFront origin"
+  value       = var.alb_target_placeholder_domain_name
+}
+
 output "s3_bucket_resources" {
   description = "Bucket ARNs including /* variants"
   value = flatten([
