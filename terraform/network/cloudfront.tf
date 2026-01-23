@@ -97,7 +97,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   # Static files origin (S3)
   origin {
     domain_name              = local.s3_origins.static.bucket_domain
-    origin_id                = "me-website-static-origin"
+    origin_id                = var.static_origin_id
     origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["static"].id
 
   }
@@ -105,14 +105,14 @@ resource "aws_cloudfront_distribution" "me_website" {
   # Error pages origin (S3)
   origin {
     domain_name              = local.s3_origins.error_pages.bucket_domain
-    origin_id                = "me-website-error-pages-origin"
+    origin_id                = var.error_pages_origin_id
     origin_access_control_id = aws_cloudfront_origin_access_control.me_website-oac["error_pages"].id
   }
 
   # ------------ DEFAULT BEHAVIOR (APP) ------------
 
   default_cache_behavior {
-    target_origin_id       = "app-origin"
+    target_origin_id       = var.alb_target_origin_id
     viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = [
@@ -144,7 +144,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   # /static/* -> S3 static bucket
   ordered_cache_behavior {
     path_pattern           = "/static/*"
-    target_origin_id       = "static-origin"
+    target_origin_id       = var.static_origin_id
     viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = [
@@ -170,7 +170,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   # /errors/* -> error pages S3 bucket
   ordered_cache_behavior {
     path_pattern           = "/errors/*"
-    target_origin_id       = "error-pages-origin"
+    target_origin_id       = var.error_pages_origin_id
     viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = [
