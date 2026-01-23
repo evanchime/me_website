@@ -22,6 +22,18 @@ variable "alb_target_origin_id" {
   default     = "me-website-app-origin"
 }
 
+variable "error_pages_origin_id" {
+  description = "The CloudFront origin ID for the error pages S3 bucket"
+  type        = string
+  default     = "me-website-error-pages-origin"
+}
+
+variable "static_origin_id" {
+  description = "The CloudFront origin ID for the static files S3 bucket"
+  type        = string
+  default     = "me-website-static-origin"
+}
+
 variable "alb_target_placeholder_domain_name" {
   description = "The domain name of the ALB to be used as CloudFront origin"
   type        = string
