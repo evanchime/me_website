@@ -28,7 +28,9 @@ data "aws_iam_policy_document" "specific_cloudfront_updates" {
       "cloudfront:UpdateDistribution",
       "cloudfront:UpdateCloudFrontOriginAccessIdentity"
       ]
-      resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.me_website.id}"]
+      resources = [
+        "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${data.terraform_remote_state.me_website_k8s_network.outputs.cloudfront_distribution_id}"
+      ]
   }
 }
 

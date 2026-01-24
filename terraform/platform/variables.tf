@@ -7,12 +7,6 @@ variable "region" {
   default     = "eu-west-2"
 }
 
-variable "domain_name" {
-  description = "The domain name for the website"
-  type        = string
-  default   = "iplayishow.com"
-}
-
 variable "tfc_kubernetes_dynamic_credentials" {
   description = "Dynamic credentials object injected by HCP Terraform"
   type = object({
@@ -49,7 +43,7 @@ variable "tfc_project" {
 variable "tfc_workspace" {
   description = "Terraform Cloud workspace name"
   type        = string
-  default     = "me-website-k8s-platform"
+  default     = terraform.workspace
 }
 
 variable "tfc_kubernetes_audience" {
