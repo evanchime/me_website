@@ -21,21 +21,6 @@ output "cluster_name" {
   value       = module.eks.cluster_name
 }
 
-output "vpc_id" {
-  description = "VPC ID"
-  value       = module.vpc.vpc_id
-}
-
-output "private_subnets" {
-  description = "Private subnet IDs"
-  value       = module.vpc.private_subnets
-}
-
-output "public_subnet" {
-  description = "List of IDs of the public subnets, suitable for NAT gateways and public load balancers."
-  value       = module.vpc.public_subnets
-}
-
 output "cluster_primary_security_group_id" {
   description = "The cluster-primary security group ID created by the EKS module. Useful for configuring access to cluster resources like EFS."
   value       = module.eks.cluster_primary_security_group_id
@@ -57,11 +42,6 @@ output "oidc_provider_arn" {
   value       = module.eks.oidc_provider_arn
 }
 
-output "vpc_cidr_block" {
-  description = "The CIDR block of the main VPC."
-  value       = module.vpc.vpc_cidr_block
-}
-
 output "rds_lambda_security_group_id" {
   description = "The ID of the security group attached to the RDS secrets rotation Lambda function."
   value       = module.rds_lambda_security_group.security_group_id
@@ -75,11 +55,6 @@ output "efs_access_point_id" {
 output "efs_file_system_id" {
   description = "The ID of the EFS file system."
   value       = module.efs.id
-}
-
-output "route53_zone_id" {
-  description = "The ID of the Route53 hosted zone for the application domain."
-  value       = data.aws_route53_zone.iplayishow.zone_id
 }
 
 output "me_website_irsa_role_arn" {

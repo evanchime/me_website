@@ -7,7 +7,7 @@ terraform {
     organization = "DevOps_As_A_Way"
     workspaces {
       project = "k8s-migration"
-      name = "k8s-migration-global_and_network"
+      name = "k8s-migration-network"
     }
   }
 

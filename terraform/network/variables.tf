@@ -35,7 +35,7 @@ variable "static_origin_id" {
 }
 
 variable "alb_target_placeholder_domain_name" {
-  description = "The domain name of the ALB to be used as CloudFront origin"
+  description = "The placeholder domain name of the ALB to be used as CloudFront origin"
   type        = string
   default     = "placeholder.example.com"
 }
