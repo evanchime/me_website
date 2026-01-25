@@ -18,11 +18,18 @@ locals {
       name = "Managed-CachingDisabled"
     }
   }
-  cf_aliases = [
-    "iplayishow.com",
-    "www.iplayishow.com",
-    "static.iplayishow.com",
-  ]
+  cname_records = {
+    www = {
+      ttl     = 300
+      records = ["iplayishow.com"]
+    }
+
+    static = {
+      ttl     = 172800
+      records = [aws_cloudfront_distribution.me_website.domain_name]
+    }
+  }
+  root_alias_record_types = ["A", "AAAA"]
 }
 
 data "aws_cloudfront_cache_policy" "policies" {
@@ -262,12 +269,12 @@ resource "aws_cloudfront_distribution" "me_website" {
   wait_for_deployment   = true
 }
 
-resource "aws_route53_record" "cf_alias_a" {
-  for_each = toset(local.cf_aliases)
+resource "aws_route53_record" "root_alias" {
+  for_each = toset(local.root_alias_record_types)
 
-  zone_id = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
-  name    = each.value
-  type    = "A"
+  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  name    = "iplayishow.com"
+  type    = each.value
 
   alias {
     name                   = aws_cloudfront_distribution.me_website.domain_name
@@ -276,16 +283,12 @@ resource "aws_route53_record" "cf_alias_a" {
   }
 }
 
-resource "aws_route53_record" "cf_alias_aaaa" {
-  for_each = toset(local.cf_aliases)
+resource "aws_route53_record" "cname" {
+  for_each = local.cname_records
 
-  zone_id = data.terraform_remote_state.me_website_k8s_platform.outputs.route53_zone_id
-  name    = each.value
-  type    = "AAAA"
-
-  alias {
-    name                   = aws_cloudfront_distribution.me_website.domain_name
-    zone_id                = aws_cloudfront_distribution.me_website.hosted_zone_id
-    evaluate_target_health = false
-  }
+  zone_id = data.aws_route53_zone.iplayishow.zone_id
+  name    = each.key
+  type    = "CNAME"
+  ttl     = each.value.ttl
+  records = each.value.records
 }
