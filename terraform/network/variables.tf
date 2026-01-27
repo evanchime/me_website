@@ -39,3 +39,9 @@ variable "alb_target_placeholder_domain_name" {
   type        = string
   default     = "placeholder.example.com"
 }
+
+variable "cloudfront_cert_arn" {
+  description = "The ACM certificate ARN for CloudFront"
+  type        = string
+  default     = "arn:aws:acm:us-east-1:661510969671:certificate/a356c6a6-82fc-4c32-a0eb-fe10ca213bcf"
+}

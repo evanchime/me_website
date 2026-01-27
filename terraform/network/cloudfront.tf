@@ -30,6 +30,7 @@ locals {
     }
   }
   root_alias_record_types = ["A", "AAAA"]
+  cloudfront_cert_arn = var.cloudfront_cert_arn
 }
 
 data "aws_cloudfront_cache_policy" "policies" {
@@ -259,7 +260,7 @@ resource "aws_cloudfront_distribution" "me_website" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = data.aws_acm_certificate.cloudfront_cert.arn
+    acm_certificate_arn            = local.cloudfront_cert_arn
     ssl_support_method             = "sni-only"
     minimum_protocol_version       = "TLSv1.2_2021"
     cloudfront_default_certificate = false
@@ -269,26 +270,26 @@ resource "aws_cloudfront_distribution" "me_website" {
   wait_for_deployment   = true
 }
 
-resource "aws_route53_record" "root_alias" {
-  for_each = toset(local.root_alias_record_types)
+# resource "aws_route53_record" "root_alias" {
+#   for_each = toset(local.root_alias_record_types)
 
-  zone_id = data.aws_route53_zone.iplayishow.zone_id
-  name    = "iplayishow.com"
-  type    = each.value
+#   zone_id = data.aws_route53_zone.iplayishow.zone_id
+#   name    = "iplayishow.com"
+#   type    = each.value
 
-  alias {
-    name                   = aws_cloudfront_distribution.me_website.domain_name
-    zone_id                = aws_cloudfront_distribution.me_website.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
+#   alias {
+#     name                   = aws_cloudfront_distribution.me_website.domain_name
+#     zone_id                = aws_cloudfront_distribution.me_website.hosted_zone_id
+#     evaluate_target_health = false
+#   }
+# }
 
-resource "aws_route53_record" "cname" {
-  for_each = local.cname_records
+# resource "aws_route53_record" "cname" {
+#   for_each = local.cname_records
 
-  zone_id = data.aws_route53_zone.iplayishow.zone_id
-  name    = each.key
-  type    = "CNAME"
-  ttl     = each.value.ttl
-  records = each.value.records
-}
+#   zone_id = data.aws_route53_zone.iplayishow.zone_id
+#   name    = each.key
+#   type    = "CNAME"
+#   ttl     = each.value.ttl
+#   records = each.value.records
+# }
