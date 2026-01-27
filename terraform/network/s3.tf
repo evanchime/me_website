@@ -20,9 +20,6 @@ locals {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
-
 resource "aws_s3_bucket" "buckets" {
   for_each = local.s3_buckets
 
