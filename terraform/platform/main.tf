@@ -60,7 +60,7 @@ data "aws_caller_identity" "current" {}
 # CONFIGURE K8S OIDC RBAC FOR THIS WORKSPACE 
 ###############################################
 module "tfc_rbac_platform" {
-  source = "../modules/tfc-rbac"
+  source = "../modules/tfc_rbac"
 
   mode         = "platform"
   cluster_name = module.eks.cluster_name

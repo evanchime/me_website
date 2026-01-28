@@ -34,7 +34,7 @@ data "kubernetes_ingress_v1" "me_website_app" {
 }
 
 module "tfc_rbac_app" {
-  source = "../modules/tfc-rbac"
+  source = "../modules/tfc_rbac"
 
   mode            = "application"
   cluster_name    = data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_name
