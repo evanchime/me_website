@@ -13,6 +13,7 @@ locals {
     Environment = "production"
     Terraform   = "true"
   }
+  cloudfront_origin_prefix_list_id = "pl-93a247fa"
 }
 
 ###############################################
@@ -31,10 +32,6 @@ data "aws_availability_zones" "available" {
 data "aws_route53_zone" "iplayishow" {
   name = "${trimsuffix(var.domain_name, ".")}."
   private_zone = false
-}
-
-data "aws_prefix_list" "cloudfront_origin_facing" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
 #######################################################

@@ -60,5 +60,5 @@ output "vpc_cidr_block" {
 
 output "cloudfront_origin_facing_prefix_list_id" {
   description = "The CloudFront origin-facing prefix list ID"
-  value       = data.aws_prefix_list.cloudfront_origin_facing.id
+  value       = local.cloudfront_origin_prefix_list_id
 }

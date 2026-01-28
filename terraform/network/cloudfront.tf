@@ -43,13 +43,6 @@ data "aws_cloudfront_cache_policy" "policies" {
   name = each.value.name
 }
 
-data "aws_acm_certificate" "cloudfront_cert" {
-  provider = aws.us_east_1
-  domain   = "*.iplayishow.com"
-  statuses = ["ISSUED"]
-  most_recent = true
-}
-
 data "aws_cloudfront_origin_request_policy" "app_request" {
   name = "Managed-AllViewerExceptHostHeader"
 }
