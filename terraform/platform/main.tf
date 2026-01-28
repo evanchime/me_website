@@ -34,6 +34,9 @@ locals {
     Environment = "production"
     Terraform   = "true"
   }
+
+  # Allow the terraform workspace variable to be overridden, but fall back to the workspace name
+  tfc_workspace = var.tfc_workspace != null ? var.tfc_workspace : terraform.workspace
   
 }
 
