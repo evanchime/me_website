@@ -24,13 +24,19 @@ output "alb_target_placeholder_domain_name" {
 }
 
 output "s3_bucket_resources" {
-  description = "Bucket ARNs including /* variants"
+  description = "Bucket ARNs including /* variants except for lambda layer"
   value = flatten([
-    for b in aws_s3_bucket.buckets : [
+    for key, b in aws_s3_bucket.buckets : [
       b.arn,
       "${b.arn}/*"
     ]
+    if key != "lambda_layer"
   ])
+}
+
+output "s3_lambda_layer_bucket" {
+  description = "The S3 bucket name for the Lambda layer"
+  value       = aws_s3_bucket.buckets["lambda_layer"].bucket
 }
 
 output "vpc_id" {

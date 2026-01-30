@@ -51,3 +51,14 @@ variable "iam_policy_arn" {
   type        = list(string)
   default     = ["arn:aws:iam::aws:policy/AmazonEventBridgeReadOnlyAccess","arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
 }
+
+variable "enable_lambda" {
+  description = "Whether to enable the Lambda function and layer"
+  type    = bool
+  default = false
+}
+
+variable "lambda_layer_s3_key" {
+  description = "The S3 key for the Lambda layer zip file"
+  type = string
+}

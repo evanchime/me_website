@@ -287,63 +287,40 @@ resource "aws_route53_record" "cname" {
   records = each.value.records
 }
 
-resource "terraform_data" "alb_lambda_package" {
-  triggers_replace = [
-    filebase64sha256("${path.module}/lambda/alb/lambda_function.py")
-  ]
-
-  provisioner "local-exec" {
-    command = <<EOF
-      rm -f "${path.module}/lambda/alb/lambda_function.zip"
-      cd "${path.module}/lambda/alb" && zip -r lambda_function.zip lambda_function.py
-    EOF
-  }
-}
-
-resource "terraform_data" "alb_lambda_install_dependencies" {
-  triggers_replace = [
-    filebase64sha256("${path.module}/lambda/alb/requirements.txt")
-  ]
-
-  provisioner "local-exec" {
-    command = <<EOF
-        rm -rf "${path.module}/lambda/alb/layer"
-        mkdir -p "${path.module}/lambda/alb/layer/python"
-        pip install -r "${path.module}/lambda/alb/requirements.txt" -t "${path.module}/lambda/alb/layer/python"
-        rm -f "${path.module}/lambda/alb/lambda_layer.zip"
-        cd "${path.module}/lambda/alb/layer" && zip -r ../lambda_layer.zip .
-    EOF
-  }
-
+data "archive_file" "alb_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/alb/lambda_function.py"
+  output_path = "${path.module}/lambda/alb/lambda_function.zip"
 }
 
 resource "aws_lambda_layer_version" "lambda_layer" {
-  depends_on = [terraform_data.alb_lambda_install_dependencies]
+  count = var.enable_lambda ? 1 : 0
 
-  filename   = "${path.module}/lambda/alb/lambda_layer.zip"
-  layer_name = "lambda-layer"
+  s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
+  s3_key              = var.lambda_layer_s3_key
+  layer_name          = "cloudfront-updater-layer"
   compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
-
-  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_layer.zip")
 }
 
 resource "aws_lambda_function" "update_cloudfront_alb_origin" {
   depends_on = [
-    terraform_data.alb_lambda_package,
-    terraform_data.alb_lambda_install_dependencies,
     aws_iam_role_policy_attachment.attach_custom_policy,
     aws_iam_role_policy_attachment.additional-necessary-policies
   ]
 
-  filename         = "${path.module}/lambda/alb/lambda_function.zip"
+  count            = var.enable_lambda ? 1 : 0
+
   function_name    = "cloudfront-alb-origin-update-function"
   role             = aws_iam_role.lambda_cloudfront_updater_role.arn
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.12"
-  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_function.zip")
+
+  filename         = data.archive_file.alb_lambda_zip.output_path
+  source_code_hash = data.archive_file.alb_lambda_zip.output_base64sha256
+
 
   layers = [
-    aws_lambda_layer_version.lambda_layer.arn
+    aws_lambda_layer_version.lambda_layer[0].arn
   ]
 
   timeout     = 300
