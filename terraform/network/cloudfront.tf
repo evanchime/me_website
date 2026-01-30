@@ -286,3 +286,114 @@ resource "aws_route53_record" "cname" {
   ttl     = each.value.ttl
   records = each.value.records
 }
+
+resource "terraform_data" "alb_lambda_package" {
+  triggers_replace = [
+    filebase64sha256("${path.module}/lambda/alb/lambda_function.py")
+  ]
+
+  provisioner "local-exec" {
+    command = <<EOF
+      rm -f "${path.module}/lambda/alb/lambda_function.zip"
+      cd "${path.module}/lambda/alb" && zip -r lambda_function.zip lambda_function.py
+    EOF
+  }
+}
+
+resource "terraform_data" "alb_lambda_install_dependencies" {
+  triggers_replace = [
+    filebase64sha256("${path.module}/lambda/alb/requirements.txt")
+  ]
+
+  provisioner "local-exec" {
+    command = <<EOF
+        rm -rf "${path.module}/lambda/alb/layer"
+        mkdir -p "${path.module}/lambda/alb/layer/python"
+        pip install -r "${path.module}/lambda/alb/requirements.txt" -t "${path.module}/lambda/alb/layer/python"
+        rm -f "${path.module}/lambda/alb/lambda_layer.zip"
+        cd "${path.module}/lambda/alb/layer" && zip -r ../lambda_layer.zip .
+    EOF
+  }
+
+}
+
+resource "aws_lambda_layer_version" "lambda_layer" {
+  depends_on = [terraform_data.alb_lambda_install_dependencies]
+
+  filename   = "${path.module}/lambda/alb/lambda_layer.zip"
+  layer_name = "lambda-layer"
+  compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
+
+  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_layer.zip")
+}
+
+resource "aws_lambda_function" "update_cloudfront_alb_origin" {
+  depends_on = [
+    terraform_data.alb_lambda_package,
+    terraform_data.alb_lambda_install_dependencies,
+    aws_iam_role_policy_attachment.attach_custom_policy,
+    aws_iam_role_policy_attachment.additional-necessary-policies
+  ]
+
+  filename         = "${path.module}/lambda/alb/lambda_function.zip"
+  function_name    = "cloudfront-alb-origin-update-function"
+  role             = aws_iam_role.lambda_cloudfront_updater_role.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  source_code_hash = filebase64sha256("${path.module}/lambda/alb/lambda_function.zip")
+
+  layers = [
+    aws_lambda_layer_version.lambda_layer.arn
+  ]
+
+  timeout     = 300
+  memory_size = 128
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      ALB_TARGET_ORIGIN_ID = var.alb_target_origin_id
+      CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.me_website.id
+      ALB_TARGET_PLACEHOLDER_DOMAIN = var.alb_target_placeholder_domain_name
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
+  name        = "create_loadbalancer_event"
+  description = "loadbalancer events"
+
+  event_pattern = <<PATTERN
+{
+  "source": [
+    "aws.elasticloadbalancing"
+  ],
+  "detail-type": [
+    "AWS API Call via CloudTrail"
+  ],
+  "detail": {
+    "eventSource": [
+      "elasticloadbalancing.amazonaws.com"
+    ],
+    "eventName": [
+      "CreateLoadBalancer"
+    ]
+  }
+}
+PATTERN
+}
+
+resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
+  rule      = aws_cloudwatch_event_rule.create_loadbalancer_event.name
+  target_id = "cloudfront-update"
+  arn       = aws_lambda_function.update_cloudfront_alb_origin.arn
+}
+
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
+    statement_id = "AllowExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.update_cloudfront_alb_origin.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.create_loadbalancer_event.arn
+}
