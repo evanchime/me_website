@@ -45,3 +45,9 @@ variable "cloudfront_cert_arn" {
   type        = string
   default     = "arn:aws:acm:us-east-1:661510969671:certificate/a356c6a6-82fc-4c32-a0eb-fe10ca213bcf"
 }
+
+variable "iam_policy_arn" {
+  description = "IAM Policy to be attached to role"
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AmazonEventBridgeReadOnlyAccess","arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+}

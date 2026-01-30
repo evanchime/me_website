@@ -4,12 +4,6 @@ variable "cloudfront_distribution_id" {
   sensitive = true
 }
 
-variable "iam_policy_arn" {
-  description = "IAM Policy to be attached to role"
-  type        = list(string)
-  default     = ["arn:aws:iam::aws:policy/AmazonEventBridgeReadOnlyAccess","arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
-}
-
 variable "mode" {
   description = "RBAC mode: platform or application"
   type        = string
