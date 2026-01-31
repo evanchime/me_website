@@ -61,4 +61,5 @@ variable "enable_lambda" {
 variable "lambda_layer_s3_key" {
   description = "The S3 key for the Lambda layer zip file"
   type = string
+  default = "layers/cloudfront-updater/v1.zip"
 }
