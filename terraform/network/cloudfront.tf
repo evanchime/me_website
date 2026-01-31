@@ -294,7 +294,7 @@ data "archive_file" "alb_lambda_zip" {
 }
 
 resource "aws_lambda_layer_version" "lambda_layer" {
-  count = var.enable_lambda ? 1 : 0
+  count = var.enable_lambda && var.lambda_layer_s3_key != "" ? 1 : 0
 
   s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
   s3_key              = var.lambda_layer_s3_key
