@@ -368,6 +368,8 @@ resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
 
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
+    count = var.enable_lambda ? 1 : 0
+
     statement_id = "AllowExecutionFromCloudWatch"
     action = "lambda:InvokeFunction"
     function_name = aws_lambda_function.update_cloudfront_alb_origin.function_name
