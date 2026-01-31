@@ -294,7 +294,7 @@ data "archive_file" "alb_lambda_zip" {
 }
 
 resource "aws_lambda_layer_version" "lambda_layer" {
-  count = var.enable_lambda && var.lambda_layer_s3_key != "" ? 1 : 0
+  count = var.enable_lambda ? 1 : 0
 
   s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
   s3_key              = var.lambda_layer_s3_key
@@ -337,6 +337,8 @@ resource "aws_lambda_function" "update_cloudfront_alb_origin" {
 }
 
 resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
+  count = var.enable_lambda ? 1 : 0
+
   name        = "create_loadbalancer_event"
   description = "loadbalancer events"
 
@@ -361,9 +363,11 @@ PATTERN
 }
 
 resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
-  rule      = aws_cloudwatch_event_rule.create_loadbalancer_event.name
+  count = var.enable_lambda ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.create_loadbalancer_event[0].name
   target_id = "cloudfront-update"
-  arn       = aws_lambda_function.update_cloudfront_alb_origin.arn
+  arn       = aws_lambda_function.update_cloudfront_alb_origin[0].arn
 }
 
 
@@ -372,7 +376,7 @@ resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
 
     statement_id = "AllowExecutionFromCloudWatch"
     action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.update_cloudfront_alb_origin.function_name
+    function_name = aws_lambda_function.update_cloudfront_alb_origin[0].function_name
     principal = "events.amazonaws.com"
-    source_arn = aws_cloudwatch_event_rule.create_loadbalancer_event.arn
+    source_arn = aws_cloudwatch_event_rule.create_loadbalancer_event[0].arn
 }
