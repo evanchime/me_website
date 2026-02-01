@@ -9,16 +9,27 @@ provider "aws" {
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+  }
 }
 
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    }
   }
 }
+
 
 locals {
   # Unique cluster name with random suffix
@@ -31,9 +42,6 @@ locals {
     Terraform   = "true"
   }
 
-  # Allow the terraform workspace variable to be overridden, but fall back to the workspace name
-  tfc_workspace = var.tfc_workspace != null ? var.tfc_workspace : terraform.workspace
-  
 }
 
 # Random strings for naming
@@ -54,24 +62,6 @@ resource "random_string" "prefix" {
 ###############################################
 
 data "aws_caller_identity" "current" {}
-
-###############################################
-# CONFIGURE K8S OIDC RBAC FOR THIS WORKSPACE 
-###############################################
-module "tfc_rbac_platform" {
-  source = "../modules/tfc_rbac"
-
-  mode         = "platform"
-  cluster_name = module.eks.cluster_name
-
-  tfc_hostname  = var.tfc_hostname
-  tfc_org       = var.tfc_org
-  tfc_project   = var.tfc_project
-  tfc_workspace = local.tfc_workspace
-
-  tfc_kubernetes_audience           = var.tfc_kubernetes_audience
-  tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
-}
 
 ########################################################################################################### 
 # EKS CLUSTER (Control plane + Fargate profiles) + K8S NAMESPACE + K8S CLUSTERISSUER +App FARGATE PROFILE
