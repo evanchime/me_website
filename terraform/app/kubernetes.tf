@@ -9,20 +9,30 @@ data "aws_eks_cluster" "cluster" {
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
+  }
 }
 
 provider "helm" {
   kubernetes {
     host                   = data.aws_eks_cluster.cluster.endpoint
     cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    token                  = file(var.tfc_kubernetes_dynamic_credentials.default.token_path)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
+    }
   }
 }
 
+
 locals {
   me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
-  tfc_workspace = var.tfc_workspace != null ? var.tfc_workspace : terraform.workspace
 }
 
 data "aws_caller_identity" "current" {}
@@ -32,22 +42,6 @@ data "kubernetes_ingress_v1" "me_website_app" {
     name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
     namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
   }
-}
-
-module "tfc_rbac_app" {
-  source = "../modules/tfc_rbac"
-
-  mode            = "application"
-  cluster_name    = data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_name
-  target_namespace = "me-website-app"
-
-  tfc_hostname  = var.tfc_hostname
-  tfc_org       = var.tfc_org
-  tfc_project   = var.tfc_project
-  tfc_workspace = local.tfc_workspace
-
-  tfc_kubernetes_audience           = var.tfc_kubernetes_audience
-  tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials
 }
 
 # Service account for me_website application
