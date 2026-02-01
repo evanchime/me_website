@@ -71,7 +71,7 @@ module "tfc_rbac_platform" {
   tfc_hostname  = var.tfc_hostname
   tfc_org       = var.tfc_org
   tfc_project   = var.tfc_project
-  tfc_workspace = var.tfc_workspace
+  tfc_workspace = local.tfc_workspace
 
   tfc_kubernetes_audience           = var.tfc_kubernetes_audience
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials

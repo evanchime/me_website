@@ -22,6 +22,7 @@ provider "helm" {
 
 locals {
   me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
+  tfc_workspace = var.tfc_workspace != null ? var.tfc_workspace : terraform.workspace
 }
 
 data "aws_caller_identity" "current" {}
@@ -43,7 +44,7 @@ module "tfc_rbac_app" {
   tfc_hostname  = var.tfc_hostname
   tfc_org       = var.tfc_org
   tfc_project   = var.tfc_project
-  tfc_workspace = var.tfc_workspace
+  tfc_workspace = local.tfc_workspace
 
   tfc_kubernetes_audience           = var.tfc_kubernetes_audience
   tfc_kubernetes_dynamic_credentials = var.tfc_kubernetes_dynamic_credentials

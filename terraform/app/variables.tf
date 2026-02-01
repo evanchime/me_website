@@ -28,7 +28,7 @@ variable "tfc_project" {
 variable "tfc_workspace" {
   description = "Terraform Cloud workspace name"
   type        = string
-  default     = terraform.workspace
+  default     = null
 }
 
 variable "tfc_kubernetes_audience" {
