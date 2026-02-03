@@ -289,16 +289,16 @@ resource "aws_route53_record" "cname" {
 
 data "archive_file" "alb_lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/lambda/alb/lambda_function.py"
-  output_path = "${path.module}/lambda/alb/lambda_function.zip"
+  source_file = "${path.module}/../lambda/alb/lambda_function.py"
+  output_path = "${path.module}/../lambda/alb/lambda_function.zip"
 }
 
 resource "aws_lambda_layer_version" "lambda_layer" {
   count = var.enable_lambda ? 1 : 0
 
   s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
-  s3_key              = var.lambda_layer_s3_key
-  layer_name          = "cloudfront-updater-layer"
+  s3_key              = "layers/${var.lambda_layer_name}/v${var.lambda_layer_version}.zip"
+  layer_name          = var.lambda_layer_name
   compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
 }
 

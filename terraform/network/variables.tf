@@ -58,8 +58,14 @@ variable "enable_lambda" {
   default = false
 }
 
-variable "lambda_layer_s3_key" {
-  description = "The S3 key for the Lambda layer zip file"
-  type = string
-  default = "layers/cloudfront-updater/v1.zip"
+variable "lambda_layer_name" {
+  description = "The name of the Lambda layer for updating CloudFront alb origin."
+  type        = string
+  default     = "cloudfront-updater"
+}
+
+variable "lambda_layer_version" {
+  description = "The version of the Lambda layer for updating CloudFront alb origin."
+  type        = string
+  default     = "0"
 }
