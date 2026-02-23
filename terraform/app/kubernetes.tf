@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 data "aws_eks_cluster" "cluster" {
-  name = data.terraform_remote_state.me_website_k8s_platform.outputs.cluster_name
+  name = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name
 }
 
 provider "kubernetes" {
@@ -30,9 +30,14 @@ provider "helm" {
   }
 }
 
-
 locals {
   me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
+  # Common tags applied to all resources
+  tags = {
+    Project     = "k8s-migration"
+    Environment = "production"
+    Terraform   = "true"
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -47,7 +52,7 @@ data "kubernetes_ingress_v1" "me_website_app" {
 # Service account for me_website application
 resource "kubernetes_service_account_v1" "me_website" {
   metadata {
-    name      = "me_website-service-account"
+    name      = "me-website-service-account"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
     annotations = {
       "eks.amazonaws.com/role-arn" = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_irsa_role_arn
@@ -55,51 +60,8 @@ resource "kubernetes_service_account_v1" "me_website" {
   }
 }
 
-resource "kubernetes_persistent_volume" "efs_pv" {
-  metadata {
-    name = "me-website-efs-pv"
-  }
-
-  spec {
-    capacity = {
-      storage = "5Gi"
-    }
-    access_modes                         = ["ReadWriteMany"]
-    volume_mode                          = "Filesystem"
-    persistent_volume_reclaim_policy     = "Retain"
-    storage_class_name                   = "efs"
-    persistent_volume_source {
-      csi {
-        driver       = "efs.csi.aws.com"
-        volume_handle = "${data.terraform_remote_state.platform.outputs.efs_file_system_id}::${data.terraform_remote_state.platform.outputs.efs_access_point_id}"
-      }
-    }
-  }
-}
-
-resource "kubernetes_persistent_volume_claim" "efs_pvc" {
-  metadata {
-    name      = "me-website-efs-pvc"
-    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
-  }
-  spec {
-    access_modes = ["ReadWriteMany"]
-    resources {
-      requests = {
-        storage = "5Gi"
-      }
-    }
-    storage_class_name = "efs"
-    volume_name        = kubernetes_persistent_volume.efs_pv.metadata[0].name
-  }
-
-  depends_on = [ kubernetes_persistent_volume.efs_pv ]
-}
-
 resource "kubernetes_deployment_v1" "me_website" {
-  depends_on = [
-    kubernetes_manifest.me_website_secrets_provider_class
-  ]
+  depends_on = [kubernetes_manifest.fargate_sg_policy]
 
   metadata {
     name      = "me-website"
@@ -112,7 +74,6 @@ resource "kubernetes_deployment_v1" "me_website" {
 
   spec {
     replicas = 2
-
 
     selector {
       match_labels = {
@@ -130,27 +91,6 @@ resource "kubernetes_deployment_v1" "me_website" {
       spec {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
 
-        # -----------------------------
-        # Volumes: Secrets + EFS
-        # -----------------------------
-        volume {
-          name = "secrets-volume"
-          csi {
-            driver = "secrets-store.csi.k8s.io"
-            read_only = true
-            volume_attributes = {
-              secretProviderClass = "me-website-secrets"
-            }
-          }
-        }
-
-        volume {
-          name = "efs-volume"
-          persistent_volume_claim {
-            claim_name = kubernetes_persistent_volume_claim.efs_pvc.metadata[0].name
-          }
-        }
-
         container {
           name  = "me-website"
           image = local.me_website_image
@@ -159,43 +99,25 @@ resource "kubernetes_deployment_v1" "me_website" {
             container_port = 8000
           }
 
-          # -----------------------------
-          # Mount Secrets + Media
-          # -----------------------------
-          volume_mount {
-            name       = "secrets-volume"
-            mount_path = "/var/secrets/app"
-            read_only  = true
-          }
-
-          volume_mount {
-            name       = "efs-volume"
-            mount_path = "/app/media"
-          }
-
-          # -----------------------------
-          # Environment: ConfigMap + Secret
-          # -----------------------------
+          # envFrom: ConfigMap + Secret
           env_from {
             config_map_ref {
-              name = "me-website-config"
+              name = kubernetes_config_map_v1.me_website_config.metadata[0].name
             }
           }
 
           env_from {
             secret_ref {
-              name = "me-website-app-secrets"
+              name = kubernetes_secret_v1.me_website_app_secrets.metadata[0].name
             }
           }
 
-          # -----------------------------
-          # Database env vars from synced Secret
-          # -----------------------------
+          # DB env vars from K8s Secret
           env {
             name = "DATABASE_HOST"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "host"
               }
             }
@@ -205,7 +127,7 @@ resource "kubernetes_deployment_v1" "me_website" {
             name = "DATABASE_USER"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "username"
               }
             }
@@ -215,7 +137,7 @@ resource "kubernetes_deployment_v1" "me_website" {
             name = "DATABASE_PASSWORD"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "password"
               }
             }
@@ -225,28 +147,30 @@ resource "kubernetes_deployment_v1" "me_website" {
             name = "DATABASE_PORT"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "port"
               }
             }
           }
 
-          # Construct DATABASE_URL for django-environ
           env {
-            name = "DATABASE_URL"
-            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_db_name}?sslmode=require"
+            name = "DATABASE_NAME"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
+                key  = "dbname"
+              }
+            }
           }
 
-          # -----------------------------
-          # Probes: Startup, Readiness, Liveness
-          # -----------------------------
+          # Probes
           startup_probe {
             exec {
-                command = [
-                    "sh",
-                    "-c",
-                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
-                ]
+              command = [
+                "sh",
+                "-c",
+                "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+              ]
             }
             period_seconds    = 10
             failure_threshold = 30
@@ -254,11 +178,11 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           readiness_probe {
             exec {
-                command = [
-                    "sh",
-                    "-c",
-                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
-                ]
+              command = [
+                "sh",
+                "-c",
+                "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+              ]
             }
             initial_delay_seconds = 20
             period_seconds        = 10
@@ -268,11 +192,11 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           liveness_probe {
             exec {
-                command = [
-                    "sh",
-                    "-c",
-                    "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
-                ]
+              command = [
+                "sh",
+                "-c",
+                "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
+              ]
             }
             initial_delay_seconds = 60
             period_seconds        = 30
@@ -280,9 +204,6 @@ resource "kubernetes_deployment_v1" "me_website" {
             failure_threshold     = 3
           }
 
-          # -----------------------------
-          # Resource Requests/Limits
-          # -----------------------------
           resources {
             requests = {
               cpu    = "200m"
@@ -300,10 +221,6 @@ resource "kubernetes_deployment_v1" "me_website" {
 }
 
 resource "kubernetes_job_v1" "me_website_migrate" {
-  depends_on = [
-    kubernetes_manifest.me_website_secrets_provider_class
-  ]
-
   metadata {
     name      = "me-website-migrate"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -330,56 +247,28 @@ resource "kubernetes_job_v1" "me_website_migrate" {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
         restart_policy       = "OnFailure"
 
-        # -----------------------------
-        # Volumes
-        # -----------------------------
-        volume {
-          name = "secrets-volume"
-
-          csi {
-            driver    = "secrets-store.csi.k8s.io"
-            read_only = true
-            volume_attributes = {
-              secretProviderClass = "me-website-secrets"
-            }
-          }
-        }
-
-        # -----------------------------
-        # Container
-        # -----------------------------
         container {
           name  = "migrate"
           image = local.me_website_image
-
           image_pull_policy = "IfNotPresent"
 
-          # Volume mounts
-          volume_mount {
-            name       = "secrets-volume"
-            mount_path = "/var/secrets/app"
-            read_only  = true
-          }
-
-          # envFrom: ConfigMap + Secret
           env_from {
             config_map_ref {
-              name = "me-website-config"
+              name = kubernetes_config_map_v1.me_website_config.metadata[0].name
             }
           }
 
           env_from {
             secret_ref {
-              name = "me-website-app-secrets"
+              name = kubernetes_secret_v1.me_website_app_secrets.metadata[0].name
             }
           }
 
-          # DB env vars from synced Secret
           env {
             name = "DATABASE_HOST"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "host"
               }
             }
@@ -389,7 +278,7 @@ resource "kubernetes_job_v1" "me_website_migrate" {
             name = "DATABASE_USER"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "username"
               }
             }
@@ -399,7 +288,7 @@ resource "kubernetes_job_v1" "me_website_migrate" {
             name = "DATABASE_PASSWORD"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "password"
               }
             }
@@ -409,19 +298,27 @@ resource "kubernetes_job_v1" "me_website_migrate" {
             name = "DATABASE_PORT"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "port"
               }
             }
           }
 
-          # Construct DATABASE_URL
           env {
-            name  = "DATABASE_URL"
-            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_db_name}?sslmode=require"
+            name = "DATABASE_NAME"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
+                key  = "dbname"
+              }
+            }
           }
 
-          # Command + args
+          env {
+            name  = "DATABASE_URL"
+            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=require"
+          }
+
           command = ["python3", "manage.py"]
           args    = ["migrate", "--noinput"]
         }
@@ -431,10 +328,6 @@ resource "kubernetes_job_v1" "me_website_migrate" {
 }
 
 resource "kubernetes_job_v1" "me_website_collectstatic" {
-  depends_on = [
-    kubernetes_manifest.me_website_secrets_provider_class
-  ]
-  
   metadata {
     name      = "me-website-collectstatic"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -461,55 +354,28 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
         restart_policy       = "OnFailure"
 
-        # -----------------------------
-        # Volumes
-        # -----------------------------
-        volume {
-          name = "secrets-volume"
-
-          csi {
-            driver       = "secrets-store.csi.k8s.io"
-            read_only    = true
-            volume_attributes = {
-              secretProviderClass = "me-website-secrets"
-            }
-          }
-        }
-
-        # -----------------------------
-        # Container
-        # -----------------------------
         container {
           name  = "collectstatic"
           image = local.me_website_image
           image_pull_policy = "IfNotPresent"
 
-          # Volume mounts
-          volume_mount {
-            name       = "secrets-volume"
-            mount_path = "/var/secrets/app"
-            read_only  = true
-          }
-
-          # envFrom: ConfigMap + Secret
           env_from {
             config_map_ref {
-              name = "me-website-config"
+              name = kubernetes_config_map_v1.me_website_config.metadata[0].name
             }
           }
 
           env_from {
             secret_ref {
-              name = "me-website-app-secrets"
+              name = kubernetes_secret_v1.me_website_app_secrets.metadata[0].name
             }
           }
 
-          # DB env vars from synced Secret
           env {
             name = "DATABASE_HOST"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "host"
               }
             }
@@ -519,7 +385,7 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
             name = "DATABASE_USER"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "username"
               }
             }
@@ -529,7 +395,7 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
             name = "DATABASE_PASSWORD"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "password"
               }
             }
@@ -539,44 +405,33 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
             name = "DATABASE_PORT"
             value_from {
               secret_key_ref {
-                name = "me-website-db"
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
                 key  = "port"
               }
             }
           }
 
-          # Construct DATABASE_URL
           env {
-            name  = "DATABASE_URL"
-            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_db_name}?sslmode=require"
+            name = "DATABASE_NAME"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.me_website_db.metadata[0].name
+                key  = "dbname"
+              }
+            }
           }
 
-          # Command + args
+          env {
+            name  = "DATABASE_URL"
+            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=require"
+          }
+
           command = ["python3", "manage.py"]
           args    = ["collectstatic", "--noinput", "--clear"]
         }
       }
     }
   }
-}
-
-resource "aws_secretsmanager_secret" "me_website_app_secrets" {
-  name        = "me-website/prod/secrets"
-  description = "Application secrets for the me-website Django app"
-}
-
-resource "aws_secretsmanager_secret_version" "me_website_app_secrets_version" {
-  secret_id     = aws_secretsmanager_secret.me_website_app_secrets.id
-  secret_string = jsonencode({
-    ME_WEBSITE_DJANGO_SECRET_KEY = var.me_website_django_secret_key
-    SECRET_ADMIN_URL             = var.secret_admin_url
-    EMAIL_HOST_USER              = var.me_website_email_host_user
-    EMAIL_HOST_PASSWORD          = var.me_website_email_host_password
-    AWS_STORAGE_BUCKET_NAME      = aws_s3_bucket.buckets["static"].bucket
-    AWS_S3_CUSTOM_DOMAIN         = "static.iplayishow.com"
-    AWS_S3_REGION_NAME           = "eu-west-2"
-    HEALTH_CHECK_SECRET          = var.health_check_secret
-  })
 }
 
 resource "kubernetes_config_map_v1" "me_website_config" {
@@ -589,150 +444,46 @@ resource "kubernetes_config_map_v1" "me_website_config" {
     DJANGO_SETTINGS_MODULE = var.me_website_django_settings_module
     DEBUG                  = tostring(var.me_website_debug_mode)
     ALLOWED_HOSTS          = var.me_website_allowed_hosts
-    CSRF_TRUSTED_ORIGINS   = "${var.me_website_csrf_trusted_origins},https://${aws_cloudfront_distribution.me_website.domain_name}"
+    CSRF_TRUSTED_ORIGINS   = "${var.me_website_csrf_trusted_origins},https://${data.terraform_remote_state.me_website_k8s_network.outputs.cloudfront_distribution_domain_name}"
     APP_VERSION            = var.me_website_app_version
   }
 }
 
-resource "kubernetes_manifest" "me_website_secret_provider_class" {
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata = {
-      name      = "me-website-secrets"
-      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
-    }
-    spec = {
-      provider = "aws"
-      parameters = {
-        objects = jsonencode([
-          {
-            objectName = "me-website/prod/secrets"
-            objectType = "secretsmanager"
-            jmesPath = [
-              {
-                path  = "ME_WEBSITE_DJANGO_SECRET_KEY"
-                objectAlias = "ME_WEBSITE_DJANGO_SECRET_KEY"
-              },
-              {
-                path  = "SECRET_ADMIN_URL"
-                objectAlias = "SECRET_ADMIN_URL"
-              },
-              {
-                path  = "EMAIL_HOST_USER"
-                objectAlias = "EMAIL_HOST_USER"
-              },
-              {
-                path  = "EMAIL_HOST_PASSWORD"
-                objectAlias = "EMAIL_HOST_PASSWORD" 
-              },
-              {
-                path  = "AWS_STORAGE_BUCKET_NAME"
-                objectAlias = "AWS_STORAGE_BUCKET_NAME"
-              },
-              {
-                path  = "AWS_S3_CUSTOM_DOMAIN"
-                objectAlias = "AWS_S3_CUSTOM_DOMAIN"
-              },
-              {
-                path  = "AWS_S3_REGION_NAME"
-                objectAlias = "AWS_S3_REGION_NAME"
-              },
-              {
-                path  = "HEALTH_CHECK_SECRET"
-                objectAlias = "HEALTH_CHECK_SECRET"
-              },
-            ]
-          },
-          {
-            objectName = "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_secret}"
-            objectType = "secretsmanager"
-            jmesPath = [
-              {
-                path  = "host"
-                objectAlias = "host"
-              },
-              {
-                path  = "username"
-                objectAlias = "username"
-              },
-              {
-                path  = "password"
-                objectAlias = "password"
-              },
-              {
-                path  = "port"
-                objectAlias = "port"
-              },
-            ]
-          }
-        ])
-      }
-      # The secretObjects block to create a standard K8s Secret
-      secretObjects = [
-        {
-          secretName = "me-website-app-secrets"
-          type       = "Opaque"
-          data = [
-            {
-              key        = "ME_WEBSITE_DJANGO_SECRET_KEY"
-              objectName = "ME_WEBSITE_DJANGO_SECRET_KEY"
-            },
-            {
-              key        = "SECRET_ADMIN_URL"
-              objectName = "SECRET_ADMIN_URL"
-            },
-            {
-              key        = "EMAIL_HOST_USER"
-              objectName = "EMAIL_HOST_USER"
-            },
-            {
-              key        = "EMAIL_HOST_PASSWORD"
-              objectName = "EMAIL_HOST_PASSWORD"
-            },
-            {
-              key        = "AWS_STORAGE_BUCKET_NAME"
-              objectName = "AWS_STORAGE_BUCKET_NAME"
-            },
-            {
-              key        = "AWS_S3_CUSTOM_DOMAIN"
-              objectName = "AWS_S3_CUSTOM_DOMAIN"
-            },
-            {
-              key        = "AWS_S3_REGION_NAME"
-              objectName = "AWS_S3_REGION_NAME"
-            },
-            {
-              key        = "HEALTH_CHECK_SECRET"
-              objectName = "HEALTH_CHECK_SECRET"
-            }
-         ]
-        },
-        {
-          secretName = "me-website-db"
-          type       = "Opaque"
-          data = [
-            {
-              key        = "host"
-              objectName = "host"
-            },
-            {
-              key        = "username"
-              objectName = "username"
-            },
-            {
-              key        = "password"
-              objectName = "password"
-            },
-            {
-              key        = "port"
-              objectName = "port"
-            }
-          ]
-        }
-      ]
-    }
+resource "kubernetes_secret_v1" "me_website_app_secrets" {
+  metadata {
+    name      = "me-website-app-secrets"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
   }
+
+  data = {
+    ME_WEBSITE_DJANGO_SECRET_KEY = var.me_website_django_secret_key
+    SECRET_ADMIN_URL             = var.me_website_secret_admin_url
+    EMAIL_HOST_USER              = var.me_website_email_host_user
+    EMAIL_HOST_PASSWORD          = var.me_website_email_host_password
+    AWS_STORAGE_BUCKET_NAME      = data.terraform_remote_state.me_website_k8s_network.outputs.s3_static_assets_bucket
+    AWS_S3_CUSTOM_DOMAIN         ="static.iplayishow.com"
+    AWS_S3_REGION_NAME           = "eu-west-2"
+    HEALTH_CHECK_SECRET          = var.me_website_health_check_secret
+  }
+
+  type = "Opaque"
+}
+
+resource "kubernetes_secret_v1" "me_website_db" {
+  metadata {
+    name      = "me-website-db"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+  }
+
+  data = {
+    host     = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_host
+    username = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_username
+    password = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_password
+    port     = tostring(data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_port)
+    dbname   = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_k8s_db_name
+  }
+
+  type = "Opaque"
 }
 
 resource "kubernetes_service_v1" "me_website_app_service" {
@@ -763,48 +514,55 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
       name      = "me-website-app-ingress"
       namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
       annotations = {
-        "kubernetes.io/ingress.class" = "alb"
         "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
         "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
-        "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTPS" = 443 }])
-        "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+        "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTP" = 80 }])
       }
     }
     spec = {
-      tls = [
-        {
-            hosts      = ["app.iplayishow.com"]
-            secretName = "app-iplayishow-com-tls"
-        }
-      ]
-
-      rules = [
-        {
-            host = "app.iplayishow.com"
-            http = {
-                paths = [
-                    {
-                        path     = "/"
-                        pathType = "Prefix"
-                        backend = {
-                            service = {
-                                name = kubernetes_service_v1.me_website_app_service.metadata[0].name
-                                port = { number = 8000 }
+        ingressClassName = "alb"
+        rules = [
+            {
+                host = "iplayishow.com"
+                http = {
+                    paths = [
+                        {
+                            path = "/"
+                            pathType = "Prefix"
+                            backend = {
+                                service = {
+                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
+                                    port = { 
+                                        number = 8000 
+                                    }
+                                }
                             }
                         }
-                    }
-                ]
-            }
-        }
-      ]
+                    ]
+                }
+            },
+            {
+                host = "www.iplayishow.com"
+                http = {
+                    paths = [
+                        {
+                            path = "/"
+                            pathType = "Prefix"
+                            backend = {
+                                service = {
+                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
+                                    port = { 
+                                        number = 8000 
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+        ]
     }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      metadata[0].annotations["alb.ingress.kubernetes.io/conditions.secure-rule"]
-    ]
   }
 }
 
@@ -824,7 +582,10 @@ resource "kubernetes_manifest" "fargate_sg_policy" {
         }
       }
       securityGroups = {
-        groupIds = [data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id]
+        groupIds = [
+            data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id,
+            data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        ]
       }
     }
   }
