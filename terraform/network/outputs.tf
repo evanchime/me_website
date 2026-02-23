@@ -13,6 +13,11 @@ output "cloudfront_distribution_id" {
   value       = aws_cloudfront_distribution.me_website.id
 }
 
+output "cloudfront_distribution_domain_name" {
+  description = "The cloudfrond distribution domain name"
+  value       = aws_cloudfront_distribution.me_website.domain_name
+}
+
 output "alb_target_origin_id" {
   description = "The CloudFront origin ID for the ALB"
   value       = var.alb_target_origin_id
@@ -37,6 +42,11 @@ output "s3_bucket_resources" {
 output "s3_lambda_layer_bucket" {
   description = "The S3 bucket name for the Lambda layer"
   value       = aws_s3_bucket.buckets["lambda_layer"].bucket
+}
+
+output "s3_static_assets_bucket" {
+  description = "The S3 bucket name for static assets"
+  value       = aws_s3_bucket.buckets["static"].bucket
 }
 
 output "vpc_id" {

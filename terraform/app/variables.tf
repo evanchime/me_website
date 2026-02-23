@@ -1,16 +1,10 @@
-variable "cloudfront_distribution_id" {
-  description = "cloudfront_distribution_id"
-  type        = string
-  sensitive = true
-}
-
 variable "me_website_email_host_user" {
     description = "Email address for me_website application admin"
     type        = string
     default = "evanchime@gmail.com"
 }
 
-variable "health_check_secret" {
+variable "me_website_health_check_secret" {
   description = "Secret string for health check endpoint"
   type        = string
   sensitive   = true
@@ -22,7 +16,7 @@ variable "me_website_email_host_password" {
     sensitive   = true
 }
 
-variable "secret_admin_url" {
+variable "me_website_secret_admin_url" {
     description = "Secret admin URL for me_website application"
     type        = string
     sensitive   = true
