@@ -289,8 +289,8 @@ resource "aws_route53_record" "cname" {
 
 data "archive_file" "alb_lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/alb/lambda_function.py"
-  output_path = "${path.module}/../lambda/alb/lambda_function.zip"
+  source_file = "${path.module}/lambda/alb/lambda_function.py"
+  output_path = "${path.module}/lambda/alb/lambda_function.zip"
 }
 
 resource "aws_lambda_layer_version" "lambda_layer" {
