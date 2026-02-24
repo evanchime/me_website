@@ -57,3 +57,8 @@ variable "me_website_app_version" {
   description = "Application version identifier"
   default     = "1.0.0"
 }
+
+variable "me_website_image_tag" {
+  description = "Immutable tag for the Docker image deployed to Kubernetes"
+  type        = string
+}
