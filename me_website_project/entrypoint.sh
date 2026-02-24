@@ -67,11 +67,5 @@ elif [[ "$DATABASE_URL" == mariadb* ]]; then
    wait_for_mysql_mariadb "MariaDB" || { echo "MariaDB not available after 30 seconds!"; exit 1; }
 fi
 
-echo "Running database migrations..."
-python3 manage.py migrate --noinput
-
-echo "Collecting static files..."
-python3 manage.py collectstatic --noinput --clear
-
 echo "Starting Gunicorn..."
 exec "$@"
