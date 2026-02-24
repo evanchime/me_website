@@ -31,7 +31,7 @@ provider "helm" {
 }
 
 locals {
-  me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:latest"
+  me_website_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.eu-west-2.amazonaws.com/me_website:${var.me_website_image_tag}"
   # Common tags applied to all resources
   tags = {
     Project     = "k8s-migration"
@@ -314,11 +314,6 @@ resource "kubernetes_job_v1" "me_website_migrate" {
             }
           }
 
-          env {
-            name  = "DATABASE_URL"
-            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=require"
-          }
-
           command = ["python3", "manage.py"]
           args    = ["migrate", "--noinput"]
         }
@@ -419,11 +414,6 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
                 key  = "dbname"
               }
             }
-          }
-
-          env {
-            name  = "DATABASE_URL"
-            value = "postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=require"
           }
 
           command = ["python3", "manage.py"]
