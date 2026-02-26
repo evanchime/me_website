@@ -14,6 +14,14 @@ DATABASE_URL="${DATABASE_URL:-""}"
 if [[ -z "$DATABASE_URL" ]]; then
    if [[ -n "$DATABASE_HOST" && -n "$DATABASE_PORT" && -n "$DATABASE_USER" && -n "$DATABASE_PASSWORD" && -n "$DATABASE_NAME" ]]; then
        echo "DATABASE_URL not provided; constructing from individual components..."
+       
+       # URL-encode the password to handle special characters
+       DATABASE_PASSWORD=$(python3 - <<EOF
+import urllib.parse
+print(urllib.parse.quote("${DATABASE_PASSWORD}", safe=""))
+EOF
+)
+
        export DATABASE_URL="postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}?sslmode=require"
    else
        echo "DATABASE_URL missing and insufficient components to construct it."
