@@ -320,6 +320,12 @@ resource "kubernetes_job_v1" "me_website_migrate" {
       }
     }
   }
+  
+  wait_for_completion = true
+  timeouts {
+    create = "10m"
+    update = "10m"
+  }
 }
 
 resource "kubernetes_job_v1" "me_website_collectstatic" {
@@ -421,6 +427,12 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
         }
       }
     }
+  }
+
+  wait_for_completion = true
+  timeouts {
+    create = "5m"
+    update = "5m"
   }
 }
 
