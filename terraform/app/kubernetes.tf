@@ -61,7 +61,11 @@ resource "kubernetes_service_account_v1" "me_website" {
 }
 
 resource "kubernetes_deployment_v1" "me_website" {
-  depends_on = [kubernetes_manifest.fargate_sg_policy]
+  depends_on = [
+    kubernetes_manifest.fargate_sg_policy,
+    kubernetes_job_v1.me_website_migrate,
+    kubernetes_job_v1.me_website_collectstatic
+  ]
 
   metadata {
     name      = "me-website"
