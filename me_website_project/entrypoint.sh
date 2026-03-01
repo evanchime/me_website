@@ -16,9 +16,9 @@ if [[ -z "$DATABASE_URL" ]]; then
        echo "DATABASE_URL not provided; constructing from individual components..."
        
        # URL-encode the password to handle special characters
-       DATABASE_PASSWORD=$(python3 - <<EOF
-import urllib.parse
-print(urllib.parse.quote("${DATABASE_PASSWORD}", safe=""))
+       DATABASE_PASSWORD=$(python3 - <<'EOF'
+import os, urllib.parse
+print(urllib.parse.quote(os.environ["DATABASE_PASSWORD"], safe=""))
 EOF
 )
 
