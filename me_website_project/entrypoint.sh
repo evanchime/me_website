@@ -30,27 +30,31 @@ EOF
 fi
 
 # Extract database components using Python's urllib.parse
-DB_HOST=$(python3 - <<EOF
+DB_HOST=$(python3 - <<'EOF'
+import os
 from urllib.parse import urlparse
-print(urlparse("$DATABASE_URL").hostname)
+print(urlparse(os.environ["DATABASE_URL"]).hostname)
 EOF
 )
 
-DB_PORT=$(python3 - <<EOF
+DB_PORT=$(python3 - <<'EOF'
+import os
 from urllib.parse import urlparse
-print(urlparse("$DATABASE_URL").port)
+print(urlparse(os.environ["DATABASE_URL"]).port)
 EOF
 )
 
-DB_USER=$(python3 - <<EOF
+DB_USER=$(python3 - <<'EOF'
+import os
 from urllib.parse import urlparse
-print(urlparse("$DATABASE_URL").username)
+print(urlparse(os.environ["DATABASE_URL"]).username)
 EOF
 )
 
-DB_PASS=$(python3 - <<EOF
+DB_PASS=$(python3 - <<'EOF'
+import os
 from urllib.parse import urlparse
-print(urlparse("$DATABASE_URL").password)
+print(urlparse(os.environ["DATABASE_URL"]).password)
 EOF
 )
 
