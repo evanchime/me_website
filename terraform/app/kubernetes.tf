@@ -62,7 +62,9 @@ resource "kubernetes_service_account_v1" "me_website" {
 
 resource "kubernetes_deployment_v1" "me_website" {
   depends_on = [
-    kubernetes_manifest.fargate_sg_policy,
+    kubernetes_manifest.fargate_sg_policy_app,
+    kubernetes_job_v1.me_website_migrate,
+    kubernetes_job_v1.me_website_collectstatic
   ]
 
   metadata {
@@ -223,6 +225,10 @@ resource "kubernetes_deployment_v1" "me_website" {
 }
 
 resource "kubernetes_job_v1" "me_website_migrate" {
+  depends_on = [
+    kubernetes_manifest.fargate_sg_policy_jobs
+  ]
+  
   metadata {
     name      = "me-website-migrate"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -331,6 +337,10 @@ resource "kubernetes_job_v1" "me_website_migrate" {
 }
 
 resource "kubernetes_job_v1" "me_website_collectstatic" {
+  depends_on = [
+    kubernetes_manifest.fargate_sg_policy_jobs
+  ]
+  
   metadata {
     name      = "me-website-collectstatic"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
@@ -570,25 +580,54 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
   }
 }
 
-resource "kubernetes_manifest" "fargate_sg_policy" {
+# Policy for main app pods
+resource "kubernetes_manifest" "fargate_sg_policy_app" {
   manifest = {
     apiVersion = "vpcresources.k8s.aws/v1beta1"
     kind       = "SecurityGroupPolicy"
     metadata = {
-      name      = "me-website-sg-policy"
+      name      = "me-website-sg-policy-app"
       namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
     }
     spec = {
       podSelector = {
-        
         matchLabels = {
           app = "me-website"
         }
       }
       securityGroups = {
         groupIds = [
-            data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id,
-            data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+          data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id,
+          data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        ]
+      }
+    }
+  }
+}
+
+# Policy for both job types
+resource "kubernetes_manifest" "fargate_sg_policy_jobs" {
+  manifest = {
+    apiVersion = "vpcresources.k8s.aws/v1beta1"
+    kind       = "SecurityGroupPolicy"
+    metadata = {
+      name      = "me-website-sg-policy-jobs"
+      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+    }
+    spec = {
+      podSelector = {
+        matchExpressions = [
+          {
+            key      = "job"
+            operator = "In"
+            values   = ["me-website-migrate", "me-website-collectstatic"]
+          }
+        ]
+      }
+      securityGroups = {
+        groupIds = [
+          data.terraform_remote_state.me_website_k8s_platform.outputs.fargate_app_sg_id,
+          data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
         ]
       }
     }
