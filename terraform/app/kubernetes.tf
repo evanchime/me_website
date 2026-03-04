@@ -239,9 +239,6 @@ resource "kubernetes_job_v1" "me_website_migrate" {
   }
 
   spec {
-    parallelism                = 1
-    completions                = 1
-    backoff_limit              = 1
     ttl_seconds_after_finished = 86400
 
     template {
@@ -351,9 +348,6 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
   }
 
   spec {
-    parallelism                = 1
-    completions                = 1
-    backoff_limit              = 1
     ttl_seconds_after_finished = 86400
 
     template {
