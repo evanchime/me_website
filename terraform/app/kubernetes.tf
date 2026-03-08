@@ -319,8 +319,8 @@ resource "kubernetes_job_v1" "me_website_migrate" {
             }
           }
 
-          command = ["python3", "manage.py"]
-          args    = ["migrate", "--noinput"]
+          command = ["/app/entrypoint.sh"]
+          args    = ["python3", "manage.py", "migrate", "--noinput"]
         }
       }
     }
@@ -428,8 +428,8 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
             }
           }
 
-          command = ["python3", "manage.py"]
-          args    = ["collectstatic", "--noinput", "--clear"]
+          command = ["/app/entrypoint.sh"]
+          args    = ["python3", "manage.py", "collectstatic", "--noinput", "--clear"]
         }
       }
     }
