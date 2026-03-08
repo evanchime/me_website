@@ -253,7 +253,7 @@ resource "kubernetes_job_v1" "me_website_migrate" {
 
       spec {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
-        restart_policy       = "OnFailure"
+        restart_policy       = "Never"
 
         container {
           name  = "migrate"
@@ -365,7 +365,7 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
 
       spec {
         service_account_name = kubernetes_service_account_v1.me_website.metadata[0].name
-        restart_policy       = "OnFailure"
+        restart_policy       = "Never"
 
         container {
           name  = "collectstatic"
