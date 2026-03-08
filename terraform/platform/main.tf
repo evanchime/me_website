@@ -461,7 +461,7 @@ module "me_website_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   version = "~> 6.2"
 
-  name = "${local.cluster_name}-me_website-app"
+  name = "${local.cluster_name}-me-website-app"
 
   policies = {
     me_website_app = aws_iam_policy.me_website_app.arn
@@ -470,7 +470,7 @@ module "me_website_irsa_role" {
   oidc_providers = {
     main = {
       provider_arn               = data.terraform_remote_state.me_website_k8s_eks.outputs.oidc_provider_arn
-      namespace_service_accounts = ["me_website-app:me_website-service-account"]
+      namespace_service_accounts = ["me-website-app:me-website-service-account"]
     }
   }
 
