@@ -533,6 +533,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
         "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTP" = 80 }])
+        "alb.ingress.kubernetes.io/healthcheck-path" = "/ht"
       }
     }
     spec = {
