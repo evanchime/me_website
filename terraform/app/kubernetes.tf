@@ -176,6 +176,7 @@ resource "kubernetes_deployment_v1" "me_website" {
                 "curl -fsS -H \"X-Health-Check-Secret: $HEALTH_CHECK_SECRET\" http://localhost:8000/ht/"
               ]
             }
+            timeout_seconds   = 3
             period_seconds    = 10
             failure_threshold = 30
           }
