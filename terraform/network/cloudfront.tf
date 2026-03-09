@@ -370,7 +370,6 @@ resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
   arn       = aws_lambda_function.update_cloudfront_alb_origin[0].arn
 }
 
-
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
     count = var.enable_lambda ? 1 : 0
 
