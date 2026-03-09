@@ -551,7 +551,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
                                 service = {
                                     name = kubernetes_service_v1.me_website_app_service.metadata[0].name
                                     port = { 
-                                        number = 8000 
+                                        number = 80 
                                     }
                                 }
                             }
@@ -570,7 +570,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
                                 service = {
                                     name = kubernetes_service_v1.me_website_app_service.metadata[0].name
                                     port = { 
-                                        number = 8000 
+                                        number = 80 
                                     }
                                 }
                             }
