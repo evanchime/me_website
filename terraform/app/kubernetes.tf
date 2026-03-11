@@ -513,7 +513,7 @@ resource "kubernetes_service_v1" "me_website_app_service" {
     }
 
     port {
-      port        = 80
+      port        = 8000
       target_port = 8000
     }
 
@@ -541,7 +541,6 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
         ingressClassName = "alb"
         rules = [
             {
-                host = "iplayishow.com"
                 http = {
                     paths = [
                         {
@@ -551,26 +550,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
                                 service = {
                                     name = kubernetes_service_v1.me_website_app_service.metadata[0].name
                                     port = { 
-                                        number = 80 
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                }
-            },
-            {
-                host = "www.iplayishow.com"
-                http = {
-                    paths = [
-                        {
-                            path = "/"
-                            pathType = "Prefix"
-                            backend = {
-                                service = {
-                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
-                                    port = { 
-                                        number = 80 
+                                        number = 8000 
                                     }
                                 }
                             }
