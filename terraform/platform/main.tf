@@ -207,10 +207,17 @@ module "fargate_app_sg" {
   vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [
+    # {
+    #     rule                     = "http-80-tcp"
+    #     source_security_group_id = module.alb_security_group.security_group_id
+    #     description              = "From ALB to me_website pods"
+    # },
     {
-        rule                     = "http-80-tcp"
+        from_port                = 8000
+        to_port                  = 8000
+        protocol                 = "tcp"
         source_security_group_id = module.alb_security_group.security_group_id
-        description              = "From ALB to me_website pods"
+        description              = "Allow ALB to reach me-website pods"
     },
     {
         rule                     = "all-tcp"
@@ -261,8 +268,15 @@ module "alb_security_group" {
   ]
 
   egress_with_cidr_blocks = [
+    # {
+    #   rule        = "http-80-tcp"
+    #   cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
+    #   description = "ALB to EKS nodes/pods"
+    # },
     {
-      rule        = "http-80-tcp"
+      from_port                = 8000
+      to_port                  = 8000
+      protocol                 = "tcp"
       cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
       description = "ALB to EKS nodes/pods"
     }
@@ -311,10 +325,17 @@ module "eks_primary_security_group" {
   security_group_id  = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
 
   ingress_with_source_security_group_id = [
+    # {
+    #   rule                     = "http-80-tcp"
+    #   source_security_group_id = module.alb_security_group.security_group_id
+    #   description              = "From ALB to me_website pods"
+    # },
     {
-      rule                     = "http-80-tcp"
-      source_security_group_id = module.alb_security_group.security_group_id
-      description              = "From ALB to me_website pods"
+        from_port                = 8000
+        to_port                  = 8000
+        protocol                 = "tcp"
+        source_security_group_id = module.alb_security_group.security_group_id
+        description              = "Allow ALB to reach me-website pods"
     },
     { 
       rule                     = "dns-tcp"
