@@ -177,6 +177,9 @@ else:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [
+        r'^ht/$',
+    ]
     CSRF_COOKIE_HTTPONLY = True 
 
     # Configure email
@@ -203,7 +206,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = "home" # Redirect to home page after login
 
 LOGOUT_REDIRECT_URL = "home" # Redirect to home page after logout
-
 
 # Optional but recommended
 APP_VERSION = env.str("APP_VERSION", "1.0.0")
@@ -252,7 +254,3 @@ LOGGING = {
         },
     },
 }
-
-
-
-
