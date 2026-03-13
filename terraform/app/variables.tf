@@ -40,12 +40,6 @@ variable "me_website_debug_mode" {
   default     = false
 }
 
-variable "me_website_allowed_hosts" {
-  type        = string
-  description = "Comma-separated list of allowed hosts"
-  default     = ".iplayishow.com,localhost,127.0.0.1"
-}
-
 variable "me_website_csrf_trusted_origins" {
   type        = string
   description = "Comma-separated list of CSRF trusted origins"
