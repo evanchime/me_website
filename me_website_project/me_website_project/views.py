@@ -56,15 +56,15 @@ def health_check(request):
     Comprehensive health check endpoint.
 
     This view function handles GET requests to the health check endpoint. 
-    It validates the secret header, then runs a health check for 
-    database. Based on the results, it returns a JSON response with the 
-    overall health status, individual service statuses, and the 
-    application version.
+    It validates the secret header, if not from an ALB health check, then 
+    runs a health check for database. Based on the results, it returns a 
+    JSON response with the overall health status, individual service 
+    statuses, and the application version.
     
     The response status code is:
         - 200 (OK): If the check passes.
         - 503 (Service Unavailable): If the check fails.
-        - 401 (Unauthorized): If the provided secret is missing or 
+        - 403 (Forbidden): If the provided secret is missing or 
         incorrect.
 
     Args:
@@ -77,19 +77,24 @@ def health_check(request):
         version.
     """
     try:
-        # Get the secret using the get_health_check_secret function to 
-        # ensure tests can patch the environment
-        expected_secret = get_health_check_secret()
-        
-        # Validate the secret header
-        provided_secret = request.headers.get("X-Health-Check-Secret")
-        logger.debug(
-            f"Health check secret validation - Provided: '{provided_secret}', "
-            f"Expected: '{expected_secret}'"
-        )
-        
-        if not compare_digest(provided_secret or "", expected_secret or ""):
-            return JsonResponse({"error": "Unauthorized"}, status=403)
+        ua = request.headers.get("User-Agent", "")
+
+        # Allow ALB health checks (no secret)
+        if not ua.startswith("ELB-HealthChecker"):
+
+            # Get the secret using the get_health_check_secret function to 
+            # ensure tests can patch the environment
+            expected_secret = get_health_check_secret()
+            
+            # Validate the secret header
+            provided_secret = request.headers.get("X-Health-Check-Secret")
+            # logger.debug(
+            #     f"Health check secret validation - Provided: '{provided_secret}', "
+            #     f"Expected: '{expected_secret}'"
+            # )
+            
+            if not compare_digest(provided_secret or "", expected_secret or ""):
+                return JsonResponse({"error": "Forbidden"}, status=403)
 
         # Run health check.
         database_status = check_database()
