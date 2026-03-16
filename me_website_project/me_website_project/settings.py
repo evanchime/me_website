@@ -176,7 +176,7 @@ else:
 
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = False
     SECURE_REDIRECT_EXEMPT = [
         r'^ht/$',
     ]
