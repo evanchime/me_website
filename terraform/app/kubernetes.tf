@@ -546,13 +546,34 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
         "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTP" = 80 }])
-        "alb.ingress.kubernetes.io/healthcheck-path" = "/ht/"
+        # "alb.ingress.kubernetes.io/healthcheck-path" = "/ht/"
+        "alb.ingress.kubernetes.io/healthcheck-protocol" = "TCP"
       }
     }
     spec = {
         ingressClassName = "alb"
         rules = [
             {
+                host = "www.iplayishow.com"
+                http = {
+                    paths = [
+                        {
+                            path = "/"
+                            pathType = "Prefix"
+                            backend = {
+                                service = {
+                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
+                                    port = { 
+                                        number = 8000 
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                host = "iplayishow.com"
                 http = {
                     paths = [
                         {
