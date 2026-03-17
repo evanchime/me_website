@@ -39,17 +39,6 @@ locals {
     Environment = "production"
     Terraform   = "true"
   }
-
-  me_website_allowed_hosts = concat(
-    [
-      ".iplayishow.com",
-      "localhost",
-      "127.0.0.1",
-    ],
-    [
-      data.kubernetes_ingress_v1.me_website_app.status[0].load_balancer[0].ingress[0].hostname
-    ]
-  )
 }
 
 data "aws_caller_identity" "current" {}
@@ -470,7 +459,7 @@ resource "kubernetes_config_map_v1" "me_website_config" {
   data = {
     DJANGO_SETTINGS_MODULE = var.me_website_django_settings_module
     DEBUG                  = tostring(var.me_website_debug_mode)
-    ALLOWED_HOSTS          = join(",", local.me_website_allowed_hosts)
+    ALLOWED_HOSTS          = var.me_website_allowed_hosts
     CSRF_TRUSTED_ORIGINS   = "${var.me_website_csrf_trusted_origins},https://${data.terraform_remote_state.me_website_k8s_network.outputs.cloudfront_distribution_domain_name}"
     APP_VERSION            = var.me_website_app_version
   }
@@ -546,7 +535,7 @@ resource "kubernetes_manifest" "me_website_app_ingress" {
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
         "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
         "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTP" = 80 }])
-        "alb.ingress.kubernetes.io/healthcheck-path" = "/ht/"
+        "alb.ingress.kubernetes.io/healthcheck-path" = "/health/"
       }
     }
     spec = {

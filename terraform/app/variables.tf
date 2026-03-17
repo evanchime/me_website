@@ -56,3 +56,9 @@ variable "me_website_image_tag" {
   description = "Immutable tag for the Docker image deployed to Kubernetes"
   type        = string
 }
+
+variable "me_website_allowed_hosts" {
+    description = "List of allowed hosts for the Django application"
+    type        = string
+    default     = ".iplayishow.com,localhost,127.0.0.1"
+}
