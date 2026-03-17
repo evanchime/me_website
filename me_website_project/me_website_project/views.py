@@ -77,24 +77,19 @@ def health_check(request):
         version.
     """
     try:
-        ua = request.headers.get("User-Agent", "")
-
-        # Allow ALB health checks (no secret)
-        if not ua.startswith("ELB-HealthChecker"):
-
-            # Get the secret using the get_health_check_secret function to 
-            # ensure tests can patch the environment
-            expected_secret = get_health_check_secret()
-            
-            # Validate the secret header
-            provided_secret = request.headers.get("X-Health-Check-Secret")
-            # logger.debug(
-            #     f"Health check secret validation - Provided: '{provided_secret}', "
-            #     f"Expected: '{expected_secret}'"
-            # )
-            
-            if not compare_digest(provided_secret or "", expected_secret or ""):
-                return JsonResponse({"error": "Forbidden"}, status=403)
+        # Get the secret using the get_health_check_secret function to 
+        # ensure tests can patch the environment
+        expected_secret = get_health_check_secret()
+        
+        # Validate the secret header
+        provided_secret = request.headers.get("X-Health-Check-Secret")
+        # logger.debug(
+        #     f"Health check secret validation - Provided: '{provided_secret}', "
+        #     f"Expected: '{expected_secret}'"
+        # )
+        
+        if not compare_digest(provided_secret or "", expected_secret or ""):
+            return JsonResponse({"error": "Forbidden"}, status=403)
 
         # Run health check.
         database_status = check_database()
