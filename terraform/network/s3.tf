@@ -6,9 +6,9 @@ locals {
     error_pages = {
       name = "me-website-static-error-pages"
     }
-    lambda_layer = {
-      name = "me-website-lambda-layer"
-    }
+    # lambda_layer = {
+    #   name = "me-website-lambda-layer"
+    # }
   }
 
   s3_origins = {
@@ -65,24 +65,24 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
   }
 }
 
-data "aws_iam_policy_document" "s3_lambda_layer_policy"{
-    statement {
-        sid    = "AllowAccountAccess"
-        effect = "Allow"
+# data "aws_iam_policy_document" "s3_lambda_layer_policy"{
+#     statement {
+#         sid    = "AllowAccountAccess"
+#         effect = "Allow"
 
-        principals {
-            type        = "AWS"
-            identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
-        }
+#         principals {
+#             type        = "AWS"
+#             identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+#         }
 
-        actions = ["s3:*"]
+#         actions = ["s3:*"]
 
-        resources = [
-            aws_s3_bucket.buckets["lambda_layer"].arn,
-            "${aws_s3_bucket.buckets["lambda_layer"].arn}/*"
-        ]
-    }
-}
+#         resources = [
+#             aws_s3_bucket.buckets["lambda_layer"].arn,
+#             "${aws_s3_bucket.buckets["lambda_layer"].arn}/*"
+#         ]
+#     }
+# }
 
 resource "aws_s3_bucket_policy" "bucket_policy" {
   for_each = local.s3_origins
@@ -92,8 +92,8 @@ resource "aws_s3_bucket_policy" "bucket_policy" {
 
 }
 
-resource "aws_s3_bucket_policy" "lambda_layer_policy" {
-    bucket = aws_s3_bucket.buckets["lambda_layer"].bucket
-    policy = data.aws_iam_policy_document.s3_lambda_layer_policy.json
-}
+# resource "aws_s3_bucket_policy" "lambda_layer_policy" {
+#     bucket = aws_s3_bucket.buckets["lambda_layer"].bucket
+#     policy = data.aws_iam_policy_document.s3_lambda_layer_policy.json
+# }
 
