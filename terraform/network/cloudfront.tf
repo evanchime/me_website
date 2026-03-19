@@ -79,7 +79,8 @@ resource "aws_cloudfront_distribution" "me_website" {
 
   # App origin (ALB) – placeholder domain name
   origin {
-    domain_name = var.alb_target_placeholder_domain_name
+    # domain_name = var.alb_target_placeholder_domain_name
+    domain_name = var.alb_target_domain_name
     origin_id   = var.alb_target_origin_id
 
     connection_attempts = 3
@@ -287,95 +288,95 @@ resource "aws_route53_record" "cname" {
   records = each.value.records
 }
 
-data "archive_file" "alb_lambda_zip" {
-  type        = "zip"
-  source_file = "${path.module}/lambda/alb/lambda_function.py"
-  output_path = "${path.module}/lambda/alb/lambda_function.zip"
-}
+# data "archive_file" "alb_lambda_zip" {
+#   type        = "zip"
+#   source_file = "${path.module}/lambda/alb/lambda_function.py"
+#   output_path = "${path.module}/lambda/alb/lambda_function.zip"
+# }
 
-resource "aws_lambda_layer_version" "lambda_layer" {
-  count = var.enable_lambda ? 1 : 0
+# resource "aws_lambda_layer_version" "lambda_layer" {
+#   count = var.enable_lambda ? 1 : 0
 
-  s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
-  s3_key              = "layers/${var.lambda_layer_name}/v${var.lambda_layer_version}.zip"
-  layer_name          = var.lambda_layer_name
-  compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
-}
+#   s3_bucket           = aws_s3_bucket.buckets["lambda_layer"].bucket
+#   s3_key              = "layers/${var.lambda_layer_name}/v${var.lambda_layer_version}.zip"
+#   layer_name          = var.lambda_layer_name
+#   compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
+# }
 
-resource "aws_lambda_function" "update_cloudfront_alb_origin" {
-  depends_on = [
-    aws_iam_role_policy_attachment.attach_custom_policy,
-    aws_iam_role_policy_attachment.additional-necessary-policies
-  ]
+# resource "aws_lambda_function" "update_cloudfront_alb_origin" {
+#   depends_on = [
+#     aws_iam_role_policy_attachment.attach_custom_policy,
+#     aws_iam_role_policy_attachment.additional-necessary-policies
+#   ]
 
-  count            = var.enable_lambda ? 1 : 0
+#   count            = var.enable_lambda ? 1 : 0
 
-  function_name    = "cloudfront-alb-origin-update-function"
-  role             = aws_iam_role.lambda_cloudfront_updater_role.arn
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.12"
+#   function_name    = "cloudfront-alb-origin-update-function"
+#   role             = aws_iam_role.lambda_cloudfront_updater_role.arn
+#   handler          = "lambda_function.lambda_handler"
+#   runtime          = "python3.12"
 
-  filename         = data.archive_file.alb_lambda_zip.output_path
-  source_code_hash = data.archive_file.alb_lambda_zip.output_base64sha256
+#   filename         = data.archive_file.alb_lambda_zip.output_path
+#   source_code_hash = data.archive_file.alb_lambda_zip.output_base64sha256
 
 
-  layers = [
-    aws_lambda_layer_version.lambda_layer[0].arn
-  ]
+#   layers = [
+#     aws_lambda_layer_version.lambda_layer[0].arn
+#   ]
 
-  timeout     = 300
-  memory_size = 128
-  reserved_concurrent_executions = 1
+#   timeout     = 300
+#   memory_size = 128
+#   reserved_concurrent_executions = 1
 
-  environment {
-    variables = {
-      ALB_TARGET_ORIGIN_ID = var.alb_target_origin_id
-      CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.me_website.id
-      ALB_TARGET_PLACEHOLDER_DOMAIN = var.alb_target_placeholder_domain_name
-    }
-  }
-}
+#   environment {
+#     variables = {
+#       ALB_TARGET_ORIGIN_ID = var.alb_target_origin_id
+#       CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.me_website.id
+#       ALB_TARGET_PLACEHOLDER_DOMAIN = var.alb_target_placeholder_domain_name
+#     }
+#   }
+# }
 
-resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
-  count = var.enable_lambda ? 1 : 0
+# resource "aws_cloudwatch_event_rule" "create_loadbalancer_event" {
+#   count = var.enable_lambda ? 1 : 0
 
-  name        = "create_loadbalancer_event"
-  description = "loadbalancer events"
+#   name        = "create_loadbalancer_event"
+#   description = "loadbalancer events"
 
-  event_pattern = <<PATTERN
-{
-  "source": [
-    "aws.elasticloadbalancing"
-  ],
-  "detail-type": [
-    "AWS API Call via CloudTrail"
-  ],
-  "detail": {
-    "eventSource": [
-      "elasticloadbalancing.amazonaws.com"
-    ],
-    "eventName": [
-      "CreateLoadBalancer"
-    ]
-  }
-}
-PATTERN
-}
+#   event_pattern = <<PATTERN
+# {
+#   "source": [
+#     "aws.elasticloadbalancing"
+#   ],
+#   "detail-type": [
+#     "AWS API Call via CloudTrail"
+#   ],
+#   "detail": {
+#     "eventSource": [
+#       "elasticloadbalancing.amazonaws.com"
+#     ],
+#     "eventName": [
+#       "CreateLoadBalancer"
+#     ]
+#   }
+# }
+# PATTERN
+# }
 
-resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
-  count = var.enable_lambda ? 1 : 0
+# resource "aws_cloudwatch_event_target" "create_loadbalancer_event_target" {
+#   count = var.enable_lambda ? 1 : 0
 
-  rule      = aws_cloudwatch_event_rule.create_loadbalancer_event[0].name
-  target_id = "cloudfront-update"
-  arn       = aws_lambda_function.update_cloudfront_alb_origin[0].arn
-}
+#   rule      = aws_cloudwatch_event_rule.create_loadbalancer_event[0].name
+#   target_id = "cloudfront-update"
+#   arn       = aws_lambda_function.update_cloudfront_alb_origin[0].arn
+# }
 
-resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
-    count = var.enable_lambda ? 1 : 0
+# resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
+#     count = var.enable_lambda ? 1 : 0
 
-    statement_id = "AllowExecutionFromCloudWatch"
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.update_cloudfront_alb_origin[0].function_name
-    principal = "events.amazonaws.com"
-    source_arn = aws_cloudwatch_event_rule.create_loadbalancer_event[0].arn
-}
+#     statement_id = "AllowExecutionFromCloudWatch"
+#     action = "lambda:InvokeFunction"
+#     function_name = aws_lambda_function.update_cloudfront_alb_origin[0].function_name
+#     principal = "events.amazonaws.com"
+#     source_arn = aws_cloudwatch_event_rule.create_loadbalancer_event[0].arn
+# }
