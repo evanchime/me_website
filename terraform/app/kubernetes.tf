@@ -43,12 +43,12 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-data "kubernetes_ingress_v1" "me_website_app" {
-  metadata {
-    name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
-    namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
-  }
-}
+# data "kubernetes_ingress_v1" "me_website_app" {
+#   metadata {
+#     name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
+#     namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
+#   }
+# }
 
 # Service account for me_website application
 resource "kubernetes_service_account_v1" "me_website" {
@@ -522,64 +522,60 @@ resource "kubernetes_service_v1" "me_website_app_service" {
   }
 }
 
-resource "kubernetes_manifest" "me_website_app_ingress" {
-  manifest = {
-    apiVersion = "networking.k8s.io/v1"
-    kind       = "Ingress"
-    metadata = {
-      name      = "me-website-app-ingress"
-      namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
-      annotations = {
-        "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
-        "alb.ingress.kubernetes.io/target-type"       = "ip"
-        "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-        "alb.ingress.kubernetes.io/security-groups" = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
-        "alb.ingress.kubernetes.io/listen-ports" = jsonencode([{ "HTTP" = 80 }])
-        "alb.ingress.kubernetes.io/healthcheck-path" = "/health/"
+resource "kubernetes_ingress_v1" "me_website_app_ingress" {
+  wait_for_load_balancer = true
+
+  metadata {
+    name      = "me-website-app-ingress"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_app_kubernetes_namespace
+    
+    annotations = {
+      "alb.ingress.kubernetes.io/load-balancer-name" = "k8s-me-website-app-alb"
+      "alb.ingress.kubernetes.io/target-type"       = "ip"
+      "alb.ingress.kubernetes.io/scheme"            = "internet-facing"
+      "alb.ingress.kubernetes.io/security-groups"   = data.terraform_remote_state.me_website_k8s_platform.outputs.alb_security_group_id
+      "alb.ingress.kubernetes.io/listen-ports"      = jsonencode([{ "HTTP" = 80 }])
+      "alb.ingress.kubernetes.io/healthcheck-path"  = "/health/"
+    }
+  }
+
+  spec {
+    ingress_class_name = "alb"
+
+    rule {
+      host = "www.iplayishow.com"
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = kubernetes_service_v1.me_website_app_service.metadata[0].name
+              port {
+                number = 8000
+              }
+            }
+          }
+        }
       }
     }
-    spec = {
-        ingressClassName = "alb"
-        rules = [
-            {
-                host = "www.iplayishow.com"
-                http = {
-                    paths = [
-                        {
-                            path = "/"
-                            pathType = "Prefix"
-                            backend = {
-                                service = {
-                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
-                                    port = { 
-                                        number = 8000 
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                }
-            },
-            {
-                host = "iplayishow.com"
-                http = {
-                    paths = [
-                        {
-                            path = "/"
-                            pathType = "Prefix"
-                            backend = {
-                                service = {
-                                    name = kubernetes_service_v1.me_website_app_service.metadata[0].name
-                                    port = { 
-                                        number = 8000 
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                }
-            },
-        ]
+
+    rule {
+      host = "iplayishow.com"
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = kubernetes_service_v1.me_website_app_service.metadata[0].name
+              port {
+                number = 8000
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -636,4 +632,14 @@ resource "kubernetes_manifest" "fargate_sg_policy_jobs" {
       }
     }
   }
+}
+
+resource "aws_route53_record" "alb_cname" {
+  depends_on = [kubernetes_ingress_v1.me_website_app_ingress]
+  
+  zone_id = data.terraform_remote_state.me_website_k8s_network.outputs.route53_zone_id
+  name    = "alb"
+  type    = "CNAME"
+  ttl     = 60
+  records = [kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname]
 }
