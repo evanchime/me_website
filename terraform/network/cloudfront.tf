@@ -4,20 +4,20 @@ provider "aws" {
 }
 
 locals {
-  cloudfront_policies = {
-    app_cache = {
-      type = "cache"
-      name = "Managed-CachingDisabled"
-    }
-    static_cache = {
-      type = "cache"
-      name = "Managed-CachingOptimized"
-    }
-    error_cache = {
-      type = "cache"
-      name = "Managed-CachingDisabled"
-    }
-  }
+#   cloudfront_policies = {
+#     app_cache = {
+#       type = "cache"
+#       name = "Managed-CachingDisabled"
+#     }
+#     static_cache = {
+#       type = "cache"
+#       name = "Managed-CachingOptimized"
+#     }
+#     error_cache = {
+#       type = "cache"
+#       name = "Managed-CachingDisabled"
+#     }
+#   }
   cname_records = {
     www = {
       ttl     = 300
@@ -33,22 +33,162 @@ locals {
   cloudfront_cert_arn = var.cloudfront_cert_arn
 }
 
-data "aws_cloudfront_cache_policy" "policies" {
-  for_each = {
-    for k, v in local.cloudfront_policies :
-    k => v
-    if v.type == "cache"
+# data "aws_cloudfront_cache_policy" "policies" {
+#   for_each = {
+#     for k, v in local.cloudfront_policies :
+#     k => v
+#     if v.type == "cache"
+#   }
+
+#   name = each.value.name
+# }
+
+# data "aws_cloudfront_origin_request_policy" "app_request" {
+#   name = "Managed-AllViewerExceptHostHeader"
+# }
+
+# data "aws_cloudfront_response_headers_policy" "static_headers" {
+#   name = "Managed-SimpleCORS"
+# }
+
+data "aws_cloudfront_cache_policy" "static_managed_cache_policy" {
+  name = "Managed-CachingOptimized"
+}
+
+resource "aws_cloudfront_response_headers_policy" "me_website_static_assets_response_headers_policy" {
+  name    = "Me-Website-Static-Assets-Response-Headers-Policy"
+  comment = "Hardens security via HSTS, CSP, and Frame Options"
+
+  security_headers_config {
+    # Strict-Transport-Security (HSTS)
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+
+    # X-Content-Type-Options
+    content_type_options {
+      override = true
+    }
+
+    # X-Frame-Options (DENY)
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+
+    # X-XSS-Protection
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = true
+    }
+
+    # Referrer-Policy
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    # Content-Security-Policy (CSP)
+    content_security_policy {
+      override = true
+      content_security_policy = "default-src 'self' https://*.cloudfront.net; script-src 'self' https://*.cloudfront.net https://*.s3.amazonaws.com https://cdn.jsdelivr.net https://getbootstrap.com; style-src 'self' 'unsafe-inline' https://*.cloudfront.net https://*.s3.amazonaws.com; img-src 'self' https://*.cloudfront.net https://*.s3.amazonaws.com data:; object-src 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests;"
+    }
+  }
+}
+
+resource "aws_cloudfront_origin_request_policy" "me_website_origin_request_policy" {
+  name    = "Me-Website-Origin-Request-Policy"
+  comment = "Forwards CSRF, Session, and Host headers to the application origin"
+
+  cookies_config {
+    cookie_behavior = "all"
   }
 
-  name = each.value.name
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = [
+        "Origin",
+        "X-CSRFToken",
+        "Referer",
+        "Host" 
+      ]
+    }
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
 }
 
-data "aws_cloudfront_origin_request_policy" "app_request" {
-  name = "Managed-AllViewerExceptHostHeader"
+resource "aws_cloudfront_cache_policy" "me_website_static_error_cache_policy" {
+  name    = "Me-Website-Static-Error-Cache-Policy"
+  comment = "Cache policy for static error pages or assets with high rotation"
+
+  min_ttl     = 10
+  max_ttl     = 10
+  default_ttl = 10
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
 }
 
-data "aws_cloudfront_response_headers_policy" "static_headers" {
-  name = "Managed-SimpleCORS"
+resource "aws_cloudfront_cache_policy" "me_website_origin_cache_policy" {
+  name        = "Me-Website-Origin-Cache-Policy"
+  comment     = "Optimized caching for apps using CSRF tokens and Session cookies"
+  
+  min_ttl     = 0
+  max_ttl     = 86400
+  default_ttl = 300
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+
+    headers_config {
+      header_behavior = "whitelist"
+      headers {
+        items = [
+          "Origin",
+          "X-CSRFToken",
+          "Referer",
+          "Host"
+        ]
+      }
+    }
+
+    cookies_config {
+      cookie_behavior = "whitelist"
+      cookies {
+        items = [
+          "sessionid",
+          "csrftoken"
+        ]
+      }
+    }
+
+    query_strings_config {
+      query_string_behavior = "all"
+    }
+  }
 }
 
 resource "aws_cloudfront_origin_access_control" "me_website-oac" {
@@ -132,8 +272,10 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id          = data.aws_cloudfront_cache_policy.policies["app_cache"].id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.app_request.id
+    # cache_policy_id          = data.aws_cloudfront_cache_policy.policies["app_cache"].id
+    # origin_request_policy_id = data.aws_cloudfront_origin_request_policy.app_request.id
+    cache_policy_id = aws_cloudfront_cache_policy.me_website_origin_cache_policy.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.me_website_origin_request_policy.id
 
     compress  = true
     min_ttl   = 0
@@ -160,8 +302,10 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id            = data.aws_cloudfront_cache_policy.policies["static_cache"].id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.static_headers.id
+    # cache_policy_id            = data.aws_cloudfront_cache_policy.policies["static_cache"].id
+    # response_headers_policy_id = data.aws_cloudfront_response_headers_policy.static_headers.id
+    cache_policy_id = data.aws_cloudfront_cache_policy.static_managed_cache_policy.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.me_website_static_assets_response_headers_policy.id
 
     compress   = true
     min_ttl    = 0
@@ -185,7 +329,8 @@ resource "aws_cloudfront_distribution" "me_website" {
       "HEAD",
     ]
 
-    cache_policy_id = data.aws_cloudfront_cache_policy.policies["error_cache"].id
+    # cache_policy_id = data.aws_cloudfront_cache_policy.policies["error_cache"].id
+    cache_policy_id = aws_cloudfront_cache_policy.me_website_static_error_cache_policy.id
 
     compress   = true
     min_ttl    = 0
