@@ -146,53 +146,6 @@ module "eks_blueprints_addons" {
 
 }
 
-###############################################
-# EFS — Persistent storage for media files
-###############################################
-
-# module "efs" {
-#   source  = "terraform-aws-modules/efs/aws"
-#   version = "~> 2.0"
-
-#   name           = "${local.cluster_name}-efs"
-#   creation_token = "${local.cluster_name}-efs-token"
-
-#   # One mount target per private subnet
-#   mount_targets = {
-#     ap1 = {
-#         subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[0]
-#         security_groups = [module.efs_security_group.security_group_id]
-#     }
-#     ap2 = {
-#         subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[1]
-#         security_groups = [module.efs_security_group.security_group_id]
-#     }
-#     ap3 = {
-#         subnet_id       = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids[2]
-#         security_groups = [module.efs_security_group.security_group_id]
-#     }
-#  }
-
-#   create_security_group = false
-  
-#   # Access point for app media
-#   access_points = {
-#     me_website-filesystem = {
-#       posix_user = { uid = 1000, gid = 1000 }
-#       root_directory = {
-#         path = "/me_website-filesystem"
-#         creation_info = {
-#           owner_uid   = 1000
-#           owner_gid   = 1000
-#           permissions = "755"
-#         }
-#       }
-#     }
-#   }
-
-#   tags = local.tags
-# }
-
 ##################################################################
 # SECURITY GROUPS — ALB, Fargate, RDS, Lambda, EKS Primary, EFS
 ##################################################################
@@ -207,11 +160,6 @@ module "fargate_app_sg" {
   vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
 
   ingress_with_source_security_group_id = [
-    # {
-    #     rule                     = "http-80-tcp"
-    #     source_security_group_id = module.alb_security_group.security_group_id
-    #     description              = "From ALB to me_website pods"
-    # },
     {
         from_port                = 8000
         to_port                  = 8000
@@ -268,11 +216,6 @@ module "alb_security_group" {
   ]
 
   egress_with_cidr_blocks = [
-    # {
-    #   rule        = "http-80-tcp"
-    #   cidr_blocks = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_cidr_block
-    #   description = "ALB to EKS nodes/pods"
-    # },
     {
       from_port                = 8000
       to_port                  = 8000
@@ -300,11 +243,6 @@ module "rds_security_group" {
       source_security_group_id = module.fargate_app_sg.security_group_id
       description              = "Allow app pods on Fargate to access RDS PostgreSQL"
     },
-    # {
-    #   rule                     = "postgresql-tcp"
-    #   source_security_group_id = module.rds_lambda_security_group.security_group_id
-    #   description              = "Allow Lambda to access RDS PostgreSQL"
-    # },
     {
       rule                     = "postgresql-tcp"
       source_security_group_id = module.eks_primary_security_group.security_group_id
@@ -325,11 +263,6 @@ module "eks_primary_security_group" {
   security_group_id  = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
 
   ingress_with_source_security_group_id = [
-    # {
-    #   rule                     = "http-80-tcp"
-    #   source_security_group_id = module.alb_security_group.security_group_id
-    #   description              = "From ALB to me_website pods"
-    # },
     {
         from_port                = 8000
         to_port                  = 8000
@@ -369,26 +302,6 @@ module "eks_primary_security_group" {
 
   tags = local.tags
 }
-
-# SG for EFS filesystem
-# module "efs_security_group" {
-#   source  = "terraform-aws-modules/security-group/aws"
-#   version = "~> 5.3"
-
-#   name        = "${local.cluster_name}-efs-sg"
-#   description = "Security group for EFS filesystem"
-#   vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
-
-#   ingress_with_source_security_group_id = [ 
-#     {
-#         rule = "nfs-tcp"
-#         source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
-#         description = "Allow EKS cluster to access EFS via NFS"
-#     }
-#    ]
-
-#   tags = local.tags
-# }
 
 ###############################################################
 # RDS — Subnet group, parameter group, instance
@@ -461,19 +374,6 @@ resource "aws_secretsmanager_secret_version" "rds_master_initial_version" {
   }
 }
 
-# resource "aws_secretsmanager_secret_rotation" "rds_master_rotation" {
-#   secret_id           = aws_secretsmanager_secret.rds_master_credentials.id
-#   rotation_lambda_arn = aws_lambda_function.rds_postgres_rotation.arn
-
-#   rotation_rules {
-#     automatically_after_days = 30
-#   }
-
-#   depends_on = [
-#     aws_secretsmanager_secret_version.rds_master_initial_version
-#   ]
-# }
-
 ###############################################################
 # IAM — IRSA role for me_website app
 ###############################################################
@@ -497,105 +397,3 @@ module "me_website_irsa_role" {
 
   tags = local.tags
 }
-
-###############################################################
-# LAMBDA — RDS password rotation function
-###############################################################
-
-# Lambda security group
-# module "rds_lambda_security_group" {
-#   source  = "terraform-aws-modules/security-group/aws"
-#   version = "~> 5.3"
-
-#   name        = "${local.cluster_name}-lambda-rds-sg"
-#   description = "Security group for the RDS instance"
-#   vpc_id      = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
-
-#   # Allow Lambda → RDS
-#   egress_with_source_security_group_id = [
-#     {
-#       rule                     = "postgresql-tcp"
-#       source_security_group_id = module.rds_security_group.security_group_id
-#       description              = "Allow Lambda to access RDS PostgreSQL"
-#     }
-#   ]
-
-#   # Allow Lambda → Secrets Manager
-#   egress_with_cidr_blocks = [
-#     {
-#       rule        = "https-443-tcp"
-#       cidr_blocks = "0.0.0.0/0"
-#       description = "Allow Lambda to access Secrets Manager"
-#     }
-#   ]
-
-#   tags = local.tags
-# }
-
-# data "archive_file" "rds_lambda_zip" {
-#   type        = "zip"
-#   source_file = "${path.module}/lambda/rds/lambda_function.py"
-#   output_path = "${path.module}/lambda/rds/lambda_function.zip"
-# }
-
-# resource "aws_lambda_layer_version" "lambda_layer" {
-#   s3_bucket           = data.terraform_remote_state.me_website_k8s_network.outputs.s3_lambda_layer_bucket
-#   s3_key              = "layers/${var.lambda_layer_name}/v${var.lambda_layer_version}.zip"
-#   layer_name          = var.lambda_layer_name
-#   compatible_runtimes = ["python3.12", "python3.11", "python3.10"]
-# }
-
-# resource "aws_lambda_function" "rds_postgres_rotation" {
-#   function_name    = "rds_postgres_rotation_single_user"
-
-#   role             = aws_iam_role.rds_secrets_rotation_lambda.arn
-#   handler          = "lambda_function.lambda_handler"
-#   runtime          = "python3.12"
-
-#   filename         = data.archive_file.rds_lambda_zip.output_path
-#   source_code_hash = data.archive_file.rds_lambda_zip.output_base64sha256
-
-
-#   layers = [
-#     aws_lambda_layer_version.lambda_layer.arn
-#   ]
-
-#   timeout     = 300
-
-#  # Environment variables for rotation logic
-#   environment {
-#     variables = {
-#       DATABASE_TIMEOUT   = "10"
-#       EXCLUDE_CHARACTERS = "/@\"'\\"
-#       LOG_LEVEL          = "INFO"
-#       ENVIRONMENT        = "production"
-#       APPLICATION        = "me_website"
-#     }
-#   }
-
-#   # Ensure dependencies, IAM role, and SG exist before Lambda is created
-#   depends_on = [
-#     module.rds_lambda_security_group,
-#     aws_iam_role_policy_attachment.lambda_basic_execution,
-#     aws_iam_role_policy.lambda_permissions_policy,
-#     aws_iam_role.rds_secrets_rotation_lambda,
-#     data.aws_iam_policy_document.lambda_permissions_policy,
-#     data.aws_iam_policy_document.lambda_assume_role,
-#   ]
-
-#   # Lambda runs inside the VPC to reach RDS
-#   vpc_config {
-#     subnet_ids         = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
-#     security_group_ids = [module.rds_lambda_security_group.security_group_id]
-#   }
-
-#   tags = local.tags
-# }
-
-# # Allow Secrets Manager to invoke the rotation Lambda
-# resource "aws_lambda_permission" "rds_allow_secret_manager" {
-#   statement_id  = "AllowExecutionFromSecretManager"
-#   action        = "lambda:InvokeFunction"
-#   function_name = aws_lambda_function.rds_postgres_rotation.function_name
-#   principal     = "secretsmanager.amazonaws.com"
-# }

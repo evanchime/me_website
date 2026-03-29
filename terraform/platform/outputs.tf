@@ -16,21 +16,6 @@ output "rds_security_group_id" {
     value = module.rds_security_group.security_group_id
 }
 
-# output "rds_lambda_security_group_id" {
-#   description = "The ID of the security group attached to the RDS secrets rotation Lambda function."
-#   value       = module.rds_lambda_security_group.security_group_id
-# }
-
-# output "efs_access_point_id" {
-#   description = "The ID of the EFS access point created for the me_website application."
-#   value       = module.efs.access_points["me_website-filesystem"].id
-# }
-
-# output "efs_file_system_id" {
-#   description = "The ID of the EFS file system."
-#   value       = module.efs.id
-# }
-
 output "me_website_irsa_role_arn" {
   description = "The ARN of the IAM role created for the me_website application service account."
   value       = module.me_website_irsa_role.arn
