@@ -23,11 +23,6 @@ output "alb_target_origin_id" {
   value       = var.alb_target_origin_id
 }
 
-# output "alb_target_placeholder_domain_name" {
-#   description = "The placeholder domain name of the ALB used as CloudFront origin"
-#   value       = var.alb_target_placeholder_domain_name
-# }
-
 output "alb_target_domain_name" {
   description = "The domain name of the ALB used as CloudFront origin"
   value       = var.alb_target_domain_name
@@ -43,11 +38,6 @@ output "s3_bucket_resources" {
     if key != "lambda_layer"
   ])
 }
-
-# output "s3_lambda_layer_bucket" {
-#   description = "The S3 bucket name for the Lambda layer"
-#   value       = aws_s3_bucket.buckets["lambda_layer"].bucket
-# }
 
 output "s3_static_assets_bucket" {
   description = "The S3 bucket name for static assets"
