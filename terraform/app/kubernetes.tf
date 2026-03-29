@@ -43,13 +43,6 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-# data "kubernetes_ingress_v1" "me_website_app" {
-#   metadata {
-#     name      = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["name"]
-#     namespace = kubernetes_manifest.me_website_app_ingress.manifest["metadata"]["namespace"]
-#   }
-# }
-
 # Service account for me_website application
 resource "kubernetes_service_account_v1" "me_website" {
   metadata {
