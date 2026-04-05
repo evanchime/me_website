@@ -582,3 +582,41 @@ module "me_website_managed_grafana" {
 
   tags = local.tags
 }
+
+# The Fluent Bit configuration
+resource "kubernetes_config_map_v1" "aws_logging" {
+  metadata {
+    name      = "aws-logging"
+    namespace = "aws-observability"
+  }
+
+  data = {
+    "output.conf" = <<EOF
+[OUTPUT]
+    Name            cloudwatch_logs
+    Match           *
+    region          ${data.terraform_remote_state.me_website_k8s_eks.outputs.region}
+    log_group_name  /aws/eks/${local.cluster_name}/fargate-logs
+    log_stream_prefix django-
+    auto_create_group true
+EOF
+
+    "parsers.conf" = <<EOF
+[PARSER]
+    Name         django-json
+    Format       json
+    Time_Key     asctime
+    Time_Format  %Y-%m-%dT%H:%M:%S
+    Time_Keep    On
+EOF
+
+    "filters.conf" = <<EOF
+[FILTER]
+    Name         parser
+    Match        *
+    Key_Name     log
+    Parser       django-json
+    Reserve_Data True
+EOF
+  }
+}
