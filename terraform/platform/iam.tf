@@ -123,3 +123,23 @@ resource "aws_iam_policy" "me_website_app" {
   policy      = data.aws_iam_policy_document.me_website_app.json
   tags        = local.tags
 }
+
+resource "aws_iam_role_policy" "me_website_logging" {
+  name = "me-website-cloudwatch-logging"
+  role = data.terraform_remote_state.me_website_k8s_eks.outputs.me_website_fargate_profile_pod_exec_role
+ 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = [
+        "logs:CreateLogStream",
+        "logs:CreateLogGroup",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Effect   = "Allow"
+      Resource = "*"
+    }]
+  })
+}
