@@ -61,3 +61,19 @@ output "alb_security_group_id" {
 output "me_website_k8s_db_secret" {
   value = aws_secretsmanager_secret.rds_master_credentials.name
 }
+
+output "me_website_prometheus_workspace_endpoint" {
+  value = aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint
+}
+
+output "grafana_url" {
+  value = "https://${module.me_website_managed_grafana.workspace_endpoint}"
+}
+
+output "adot_col_namespace" {
+  value = kubernetes_namespace_v1.adot_col.metadata[0].name
+}
+
+output "adot_infra_config_map" {
+  value = kubernetes_config_map_v1.adot_infra_config.metadata[0].name
+}
