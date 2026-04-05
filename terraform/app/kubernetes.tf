@@ -604,6 +604,31 @@ resource "kubernetes_service_v1" "me_website_app_service" {
   }
 }
 
+resource "kubernetes_service_v1" "adot_collector_service" {
+  metadata {
+    name      = "adot-collector-service"
+    namespace = "${data.terraform_remote_state.me_website_k8s_platform.outputs.adot_col_namespace}"
+    labels = {
+      app       = "aws-adot"
+      component = "adot-collector"
+    }
+  }
+
+  spec {
+    selector = {
+      component = "adot-collector"
+    }
+
+    port {
+      name        = "metrics"
+      port        = 8888
+      target_port = 8888
+    }
+
+    type = "ClusterIP"
+  }
+}
+
 resource "kubernetes_ingress_v1" "me_website_app_ingress" {
   wait_for_load_balancer = true
 
@@ -725,3 +750,66 @@ resource "aws_route53_record" "alb_cname" {
   ttl     = 60
   records = [kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname]
 }
+
+resource "kubernetes_stateful_set_v1" "adot_infra" {
+  metadata {
+    name      = "adot-collector"
+    namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.adot_col_namespace
+  }
+
+  spec {
+    service_name = "adot-collector-service"
+    replicas     = 1
+
+    selector {
+      match_labels = { app = "aws-adot", component = "adot-collector" }
+    }
+
+    template {
+      metadata {
+        labels = { app = "aws-adot", component = "adot-collector" }
+      }
+
+      spec {
+        service_account_name = "adot-collector"
+        
+        container {
+          name    = "adot-collector"
+          image   = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+          command = ["/awscollector"]
+          args    = ["--config=/conf/otel-config.yaml"]
+
+          resources {
+            limits = {
+              cpu    = "250m"
+              memory = "512Mi"
+            }
+            requests = {
+              cpu    = "100m"
+              memory = "256Mi"
+            }
+          }
+
+          env {
+            name  = "OTEL_RESOURCE_ATTRIBUTES"
+            value = "ClusterName=${data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name}"
+          }
+
+          volume_mount {
+            name       = "adot-infra-config-volume"
+            mount_path = "/etc/otel-config.yaml"
+            sub_path   = "otel-config.yaml"
+          }
+        }
+
+        volume {
+          name = "adot-infra-config-volume"
+          config_map {
+            name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_adot_infra_config_map
+          }
+        }
+      }
+    }
+  }
+}
+
