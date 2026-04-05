@@ -36,3 +36,8 @@ output "oidc_provider_arn" {
   description = "The ARN of the cluster's OIDC provider for IAM roles for service accounts (IRSA)."
   value       = module.eks.oidc_provider_arn
 }
+
+output "me_website_fargate_profile_pod_exec_role" {
+  description = "The IAM role name for the me_website Fargate profile pod execution role."
+  value       = module.eks.fargate_profiles["me_website"].iam_role_name
+}
