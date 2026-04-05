@@ -2,6 +2,11 @@ provider "aws" {
   region = data.terraform_remote_state.me_website_k8s_platform.outputs.region
 }
 
+provider "grafana" {
+  url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
+  auth = var.grafana_api_key # You'll need to generate this after initial login
+}
+
 data "aws_eks_cluster" "cluster" {
   name = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name
 }
