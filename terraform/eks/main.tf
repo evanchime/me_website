@@ -71,6 +71,17 @@ module "eks" {
         { namespace = "me-website-app" }
       ]
     }
+
+    observability = {
+      name       = "fp-observability"
+      subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
+      selectors = [
+        { namespace = "grafana-operator" },
+        { namespace = "adot-col" },
+        { namespace = "aws-observability" }
+      ]
+    }
+
   }
 
   tags = local.tags
