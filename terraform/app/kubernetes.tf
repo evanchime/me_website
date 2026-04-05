@@ -508,7 +508,7 @@ receivers:
 
 exporters:
   prometheusremotewrite:
-    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
+    endpoint: "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_prometheus_workspace_endpoint}api/v1/remote_write"
     auth:
       authenticator: sigv4auth
   awsxray:
@@ -523,58 +523,6 @@ service:
     traces:
       receivers: [otlp]
       exporters: [awsxray]
-EOF
-  }
-}
-
-resource "kubernetes_config_map_v1" "adot_infra_config" {
-  metadata {
-    name      = "adot-infra-config"
-    namespace = "adot-col"
-  }
-
-  data = {
-    "otel-config.yaml" = <<EOF
-extensions:
-  sigv4auth:
-    region: "${data.terraform_remote_state.me_website_k8s_platform.outputs.region}"
-    service: "aps"
-
-receivers:
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: 'kubernetes-nodes-cadvisor'
-          scheme: https
-          authorization:
-            type: Bearer
-            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-          tls_config:
-            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-            insecure_skip_verify: true
-          kubernetes_sd_configs:
-            - role: node
-          relabel_configs:
-            - action: replace
-              replacement: kubernetes.default.svc:443
-              target_label: __address__
-            - source_labels: [__meta_kubernetes_node_name]
-              regex: (.+)
-              target_label: __metrics_path__
-              replacement: /api/v1/nodes/$${1}/proxy/metrics/cadvisor
-
-exporters:
-  prometheusremotewrite:
-    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
-    auth:
-      authenticator: sigv4auth
-
-service:
-  extensions: [sigv4auth]
-  pipelines:
-    metrics:
-      receivers: [prometheus]
-      exporters: [prometheusremotewrite]
 EOF
   }
 }
@@ -771,10 +719,4 @@ resource "aws_route53_record" "alb_cname" {
   type    = "CNAME"
   ttl     = 60
   records = [kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname]
-}
-
-resource "aws_prometheus_workspace" "me_website_prometheus" {
-  alias = "me-website-metrics"
-
-  tags = local.tags
 }
