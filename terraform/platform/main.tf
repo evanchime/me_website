@@ -79,6 +79,67 @@ resource "kubernetes_namespace_v1" "me_website_app" {
   }
 }
 
+resource "kubernetes_namespace_v1" "adot_col" {
+  metadata {
+    name = "adot-col"
+  }
+}
+
+resource "kubernetes_namespace_v1" "aws_observability" {
+  metadata {
+    name = "aws-observability"
+    labels = {
+      "aws-observability" = "enabled"
+    }
+  }
+}
+
+resource "kubernetes_service_account_v1" "adot_collector" {
+  metadata {
+    name      = "adot-collector-service-account"
+    namespace = kubernetes_namespace_v1.adot_col.metadata[0].name
+    annotations = {
+      "eks.amazonaws.com/role-arn" = module.me_website_adot_infra_irsa.arn
+    }
+  }
+}
+
+resource "kubernetes_cluster_role_v1" "adot_infra" {
+  metadata {
+    name = "adotcol-admin-role"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods", "pods/proxy"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
+    # Specifically for the cAdvisor proxy scraping
+    non_resource_urls = ["/metrics/cadvisor"]
+    verbs             = ["get", "list", "watch"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding_v1" "adot_infra" {
+  metadata {
+    name = "adotcol-admin-role-binding"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.adot_infra.metadata.name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = "adot-collector-service-account"
+    namespace = kubernetes_namespace_v1.adot_col.metadata[0].name
+  }
+}
+
 ###############################################################
 # EKS ADDONS (ALB Controller, ExternalDNS, CSI Driver, etc.)
 ###############################################################
@@ -396,6 +457,128 @@ module "me_website_irsa_role" {
       namespace_service_accounts = ["me-website-app:me-website-service-account"]
     }
   }
+
+  tags = local.tags
+}
+
+module "me_website_adot_infra_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.2"
+  name    = "${local.cluster_name}-me-website-adot-infra"
+
+  policies = {
+    prometheus = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = data.terraform_remote_state.me_website_k8s_eks.outputs.oidc_provider_arn
+      namespace_service_accounts = ["adot-col:adot-collector-service-account"]
+    }
+  }
+}
+
+resource "helm_release" "grafana_kubernetes_operator" {
+  name       = "grafana-operator"
+  namespace        = "grafana-operator"
+  create_namespace = true
+  repository = "oci://ghcr.io/grafana/helm-charts"
+  chart      = "grafana-operator"
+  verify     = false
+  version    = "5.22.2"
+  wait       = true
+}
+
+resource "aws_prometheus_workspace" "me_website_prometheus" {
+  alias = "me-website-metrics"
+
+  tags = local.tags
+}
+
+resource "kubernetes_config_map_v1" "adot_infra_config" {
+  metadata {
+    name      = "adot-infra-config"
+    namespace = "adot-col"
+  }
+
+  data = {
+    "otel-config.yaml" = <<EOF
+extensions:
+  sigv4auth:
+    region: "${data.terraform_remote_state.me_website_k8s_eks.outputs.region}"
+    service: "aps"
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'kubernetes-nodes-cadvisor'
+          scheme: https
+          authorization:
+            type: Bearer
+            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          tls_config:
+            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            insecure_skip_verify: true
+          kubernetes_sd_configs:
+            - role: node
+          relabel_configs:
+            - action: replace
+              replacement: kubernetes.default.svc:443
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_node_name]
+              regex: (.+)
+              target_label: __metrics_path__
+              replacement: /api/v1/nodes/$${1}/proxy/metrics/cadvisor
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
+    auth:
+      authenticator: sigv4auth
+
+service:
+  extensions: [sigv4auth]
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheusremotewrite]
+EOF
+  }
+}
+
+module "me_website_managed_grafana" {
+  source  = "terraform-aws-modules/managed-service-grafana/aws"
+  version = "2.3.1"
+
+  # Workspace
+  name        = "me-website-grafana-workspace"
+  description = "Amazon Managed Grafana workspace for me-website application"
+  associate_license         = false
+  account_access_type       = "CURRENT_ACCOUNT"
+  authentication_providers  = ["AWS_SSO"]
+  permission_type           = "SERVICE_MANAGED"
+  data_sources              = ["CLOUDWATCH", "PROMETHEUS", "XRAY"]
+  grafana_version           = "10.4"
+
+  configuration = jsonencode({
+    unifiedAlerting = {
+      enabled = true
+    },
+    plugins = {
+      pluginAdminEnabled = true
+    }
+  })
+
+  # Workspace IAM role
+  create_iam_role                = true
+  iam_role_name                  = "me-website-grafana-workspace"
+  use_iam_role_name_prefix       = true
+  iam_role_description           = "IAM role for Amazon Managed Grafana workspace for me-website application"
+  iam_role_path                  = "/grafana/"
+  iam_role_force_detach_policies = true
+  iam_role_max_session_duration  = 7200
+  iam_role_tags                  =  local.tags
 
   tags = local.tags
 }
