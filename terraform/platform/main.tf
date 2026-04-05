@@ -386,6 +386,8 @@ module "me_website_irsa_role" {
 
   policies = {
     me_website_app = aws_iam_policy.me_website_app.arn
+    prometheus     = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
+    xray           = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
   }
 
   oidc_providers = {
