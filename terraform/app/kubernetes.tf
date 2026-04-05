@@ -97,6 +97,16 @@ resource "kubernetes_deployment_v1" "me_website" {
             container_port = 8000
           }
 
+          env {
+            name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+            value = "http://localhost:4317"
+          }
+
+          env {
+            name  = "OTEL_EXPORTER_OTLP_INSECURE"
+            value = "true"
+          }
+
           # envFrom: ConfigMap + Secret
           env_from {
             config_map_ref {
@@ -212,6 +222,40 @@ resource "kubernetes_deployment_v1" "me_website" {
               cpu    = "1"
               memory = "1Gi"
             }
+          }
+        }
+
+        # --- ADOT Sidecar ---
+        container {
+          name    = "adot-collector"
+          image   = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+          command = ["/awscollector"]
+          args    = ["--config=/etc/otel-config.yaml"]
+
+          port {
+            container_port = 4317 # OTLP gRPC
+          }
+
+          port {
+            container_port = 4318 # OTLP HTTP
+          }
+
+          env {
+            name  = "AWS_REGION"
+            value = data.terraform_remote_state.me_website_k8s_platform.outputs.region
+          }
+
+          volume_mount {
+            name       = "adot-config-volume"
+            mount_path = "/etc/otel-config.yaml"
+            sub_path   = "otel-config.yaml"
+          }
+        }
+
+        volume {
+          name = "adot-config-volume"
+          config_map {
+            name = kubernetes_config_map_v1.adot_app_config.metadata[0].name
           }
         }
       }
@@ -443,6 +487,98 @@ resource "kubernetes_job_v1" "me_website_collectstatic" {
   }
 }
 
+resource "kubernetes_config_map_v1" "adot_app_config" {
+  metadata {
+    name      = "adot-app-config"
+    namespace = "me-website-app"
+  }
+
+  data = {
+    "otel-config.yaml" = <<EOF
+extensions:
+  sigv4auth:
+    region: "${data.terraform_remote_state.me_website_k8s_platform.outputs.region}"
+    service: "aps"
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
+    auth:
+      authenticator: sigv4auth
+  awsxray:
+    region: "${data.terraform_remote_state.me_website_k8s_platform.outputs.region}"
+
+service:
+  extensions: [sigv4auth]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheusremotewrite]
+    traces:
+      receivers: [otlp]
+      exporters: [awsxray]
+EOF
+  }
+}
+
+resource "kubernetes_config_map_v1" "adot_infra_config" {
+  metadata {
+    name      = "adot-infra-config"
+    namespace = "adot-col"
+  }
+
+  data = {
+    "otel-config.yaml" = <<EOF
+extensions:
+  sigv4auth:
+    region: "${data.terraform_remote_state.me_website_k8s_platform.outputs.region}"
+    service: "aps"
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'kubernetes-nodes-cadvisor'
+          scheme: https
+          authorization:
+            type: Bearer
+            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          tls_config:
+            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            insecure_skip_verify: true
+          kubernetes_sd_configs:
+            - role: node
+          relabel_configs:
+            - action: replace
+              replacement: kubernetes.default.svc:443
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_node_name]
+              regex: (.+)
+              target_label: __metrics_path__
+              replacement: /api/v1/nodes/$${1}/proxy/metrics/cadvisor
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
+    auth:
+      authenticator: sigv4auth
+
+service:
+  extensions: [sigv4auth]
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheusremotewrite]
+EOF
+  }
+}
+
 resource "kubernetes_config_map_v1" "me_website_config" {
   metadata {
     name      = "me-website-config"
@@ -471,7 +607,7 @@ resource "kubernetes_secret_v1" "me_website_app_secrets" {
     EMAIL_HOST_PASSWORD          = var.me_website_email_host_password
     AWS_STORAGE_BUCKET_NAME      = data.terraform_remote_state.me_website_k8s_network.outputs.s3_static_assets_bucket
     AWS_S3_CUSTOM_DOMAIN         ="static.iplayishow.com"
-    AWS_S3_REGION_NAME           = "eu-west-2"
+    AWS_S3_REGION_NAME           = data.terraform_remote_state.me_website_k8s_platform.outputs.region
     HEALTH_CHECK_SECRET          = var.me_website_health_check_secret
   }
 
@@ -635,4 +771,10 @@ resource "aws_route53_record" "alb_cname" {
   type    = "CNAME"
   ttl     = 60
   records = [kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname]
+}
+
+resource "aws_prometheus_workspace" "me_website_prometheus" {
+  alias = "me-website-metrics"
+
+  tags = local.tags
 }
