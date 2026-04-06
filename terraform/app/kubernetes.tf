@@ -813,3 +813,15 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
   }
 }
 
+resource "grafana_data_source" "prometheus" {
+  type = "prometheus"
+  name = "Amazon Managed Prometheus"
+  url  = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_prometheus_workspace_endpoint
+
+  json_data_encoded = jsonencode({
+    httpMethod    = "POST"
+    sigv4Auth     = true
+    sigv4AuthType = "workspace-iam-role"
+    sigv4Region   = var.aws_region
+  })
+}
