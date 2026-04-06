@@ -64,7 +64,13 @@ variable "me_website_allowed_hosts" {
 }
 
 variable "grafana_api_key" {
-  description = "API key for Amazon Managed Grafana instance"
+  description = "Token for the Terraform Provider"
+  type        = string
+  sensitive   = true
+}
+
+variable "amg_service_account_token" {
+  description = "Token for the Grafana Operator K8s Secret"
   type        = string
   sensitive   = true
 }

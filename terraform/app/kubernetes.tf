@@ -907,14 +907,14 @@ EOF
 }
 
 # The Secret for the AMG Token
-resource "kubernetes_secret" "me_website_amg_api_key" {
+resource "kubernetes_secret" "me_website_amg_service_account_token" {
   metadata {
-    name      = "me-website-amg-api-key"
+    name      = "me-website-amg-service-account-token"
     namespace = "grafana-operator"
   }
 
   data = {
-    key = var.grafana_api_key 
+    key = var.amg_service_account_token
   }
 }
 
@@ -934,7 +934,7 @@ resource "kubernetes_manifest" "me_website_amg_instance" {
       external = {
         url = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
         apiKeySecret = {
-          name = kubernetes_secret.me_website_amg_api_key.metadata[0].name
+          name = kubernetes_secret.me_website_amg_service_account_token.metadata[0].name
           key  = "key"
         }
       }
