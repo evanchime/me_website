@@ -4,7 +4,7 @@ provider "aws" {
 
 provider "grafana" {
   url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
-  auth = var.grafana_api_key # You'll need to generate this after initial login
+  auth = var.grafana_api_key
 }
 
 data "aws_eks_cluster" "cluster" {
@@ -824,4 +824,120 @@ resource "grafana_data_source" "prometheus" {
     sigv4AuthType = "workspace-iam-role"
     sigv4Region   = var.aws_region
   })
+}
+
+resource "kubernetes_manifest" "me_website_grafana_dashboard" {
+  manifest = {
+    apiVersion = "grafana.integreatly.org/v1beta1"
+    kind       = "GrafanaDashboard"
+    metadata = {
+      name      = "me-website-fargate-full-monitor"
+      namespace = "grafana-operator"
+    }
+    spec = {
+      instanceSelector = {
+        matchLabels = {
+          dashboards = "amazon-managed-grafana"
+        }
+      }
+      json = <<EOF
+{
+  "title": "Django Website: Full Observability",
+  "panels": [
+    {
+      "title": "1. Request Latency (App)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(django_http_requests_latency_seconds_sum[5m]) / rate(django_http_requests_latency_seconds_count[5m])",
+          "legendFormat": "Avg Latency (sec)"
+        }
+      ]
+    },
+    {
+      "title": "2. HTTP Status Codes",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(django_http_requests_total_by_status[5m])) by (status)",
+          "legendFormat": "Status: {{status}}"
+        }
+      ]
+    },
+    {
+      "title": "3. Fargate CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container='django'}[5m]))",
+          "legendFormat": "vCPU Load"
+        }
+      ]
+    },
+    {
+      "title": "4. Memory (Working Set)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes{container='django'}",
+          "legendFormat": "Memory Bytes"
+        }
+      ]
+    },
+    {
+      "title": "5. Network Outbound",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total[5m]))",
+          "legendFormat": "Bytes/sec Out"
+        }
+      ]
+    }
+  ]
+}
+EOF
+    }
+  }
+}
+
+# The Secret for the AMG Token
+resource "kubernetes_secret" "me_website_amg_api_key" {
+  metadata {
+    name      = "me-website-amg-api-key"
+    namespace = "grafana-operator"
+  }
+
+  data = {
+    key = var.grafana_api_key 
+  }
+}
+
+# The Grafana Instance for the Operator to use
+resource "kubernetes_manifest" "me_website_amg_instance" {
+  manifest = {
+    apiVersion = "grafana.integreatly.org/v1beta1"
+    kind       = "Grafana"
+    metadata = {
+      name      = "me-website-amg-instance"
+      namespace = "grafana-operator"
+      labels = {
+        dashboards = "amazon-managed-grafana"
+      }
+    }
+    spec = {
+      external = {
+        url = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
+        apiKeySecret = {
+          name = kubernetes_secret.me_website_amg_api_key.metadata[0].name
+          key  = "key"
+        }
+      }
+    }
+  }
 }

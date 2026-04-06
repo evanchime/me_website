@@ -62,3 +62,9 @@ variable "me_website_allowed_hosts" {
     type        = string
     default     = ".iplayishow.com,localhost,127.0.0.1"
 }
+
+variable "grafana_api_key" {
+  description = "API key for Amazon Managed Grafana instance"
+  type        = string
+  sensitive   = true
+}
