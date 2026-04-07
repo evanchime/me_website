@@ -66,7 +66,7 @@ output "me_website_prometheus_workspace_endpoint" {
   value = aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint
 }
 
-output "grafana_url" {
+output "grafana_workspace_url" {
   value = "https://${module.me_website_managed_grafana.workspace_endpoint}"
 }
 
@@ -76,4 +76,9 @@ output "adot_col_namespace" {
 
 output "adot_infra_config_map" {
   value = kubernetes_config_map_v1.adot_infra_config.metadata[0].name
+}
+
+output "grafana_workspace_id" {
+  description = "The ID of the Grafana workspace created for the me_website application."
+  value = module.me_website_managed_grafana.workspace_id
 }
