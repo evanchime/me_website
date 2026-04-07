@@ -777,7 +777,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
           name    = "adot-collector"
           image   = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
           command = ["/awscollector"]
-          args    = ["--config=/conf/otel-config.yaml"]
+          args    = ["--config=/etc/otel-config.yaml"]
 
           resources {
             limits = {
