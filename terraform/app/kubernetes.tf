@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 provider "grafana" {
-  url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
+  url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
   auth = var.grafana_api_key
 }
 
@@ -47,6 +47,9 @@ locals {
 }
 
 data "aws_caller_identity" "current" {}
+
+# Look up SSO instance
+data "aws_ssoadmin_instances" "this" {}
 
 # Service account for me_website application
 resource "kubernetes_service_account_v1" "me_website" {
@@ -932,7 +935,7 @@ resource "kubernetes_manifest" "me_website_amg_instance" {
     }
     spec = {
       external = {
-        url = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_url}"
+        url = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
         apiKeySecret = {
           name = kubernetes_secret.me_website_amg_service_account_token.metadata[0].name
           key  = "key"
@@ -940,4 +943,29 @@ resource "kubernetes_manifest" "me_website_amg_instance" {
       }
     }
   }
+}
+
+# Create the SSO User
+resource "aws_identitystore_user" "me" {
+  identity_store_id = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
+
+  display_name = "My Personal Website Admin"
+  user_name    = "evanchime@gmail.com"
+
+  name {
+    given_name  = "Evan"
+    family_name = "Chime"
+  }
+
+  emails {
+    value   = "evanchime@gmail.com"
+    primary = true
+  }
+}
+
+# Use the created user's ID for the Grafana assignment
+resource "aws_grafana_role_association" "me_admin" {
+  role         = "ADMIN"
+  user_ids     = [aws_identitystore_user.me.user_id]
+  workspace_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_id
 }
