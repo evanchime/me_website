@@ -822,7 +822,7 @@ resource "grafana_data_source" "prometheus" {
     httpMethod    = "POST"
     sigv4Auth     = true
     sigv4AuthType = "workspace-iam-role"
-    sigv4Region   = var.aws_region
+    sigv4Region   = data.terraform_remote_state.me_website_k8s_platform.outputs.region
   })
 }
 
