@@ -238,9 +238,18 @@ if ADMIN_EMAIL and ADMIN_EMAIL != 'default@example.com':
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+            # Time format to match Fluent Bit parser
+            'datefmt': '%Y-%m-%dT%H:%M:%S' 
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'json',
         },
         'mail_admins': {
             'level': 'ERROR',
@@ -253,5 +262,9 @@ LOGGING = {
             'level': 'ERROR', # Only log ERROR level messages and higher
             'propagate': True,
         },
+    },
+     'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
     },
 }
