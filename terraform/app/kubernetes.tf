@@ -4,7 +4,7 @@ provider "aws" {
 
 provider "grafana" {
   url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
-  auth = var.grafana_api_key
+  auth = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_provider_token
 }
 
 data "aws_eks_cluster" "cluster" {
@@ -905,42 +905,6 @@ resource "kubernetes_manifest" "me_website_grafana_dashboard" {
   ]
 }
 EOF
-    }
-  }
-}
-
-# The Secret for the AMG Token
-resource "kubernetes_secret" "me_website_amg_service_account_token" {
-  metadata {
-    name      = "me-website-amg-service-account-token"
-    namespace = "grafana-operator"
-  }
-
-  data = {
-    key = var.amg_service_account_token
-  }
-}
-
-# The Grafana Instance for the Operator to use
-resource "kubernetes_manifest" "me_website_amg_instance" {
-  manifest = {
-    apiVersion = "grafana.integreatly.org/v1beta1"
-    kind       = "Grafana"
-    metadata = {
-      name      = "me-website-amg-instance"
-      namespace = "grafana-operator"
-      labels = {
-        dashboards = "amazon-managed-grafana"
-      }
-    }
-    spec = {
-      external = {
-        url = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
-        apiKeySecret = {
-          name = kubernetes_secret.me_website_amg_service_account_token.metadata[0].name
-          key  = "key"
-        }
-      }
     }
   }
 }

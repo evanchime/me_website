@@ -620,3 +620,59 @@ EOF
 EOF
   }
 }
+
+resource "aws_grafana_workspace_service_account" "this" {
+  workspace_id   = module.me_website_managed_grafana.workspace_id
+  name           = "grafana-workspace-service-account"
+  grafana_role   = "ADMIN"
+}
+
+resource "aws_grafana_workspace_service_account_token" "grafana_operator_token" {
+  workspace_id       = module.me_website_managed_grafana.workspace_id
+  service_account_id = aws_grafana_workspace_service_account.this.service_account_id
+  name               = "grafana-operator-token"
+  seconds_to_live    = 2592000
+}
+
+resource "aws_grafana_workspace_service_account_token" "grafana_provider_token" {
+  workspace_id       = module.me_website_managed_grafana.workspace_id
+  service_account_id = aws_grafana_workspace_service_account.this.service_account_id
+  name               = "grafana-provider-token"
+  seconds_to_live    = 7200
+}
+
+# The Secret for the AMG Tokens
+resource "kubernetes_secret_v1" "grafana_operator_token_secret" {
+  metadata {
+    name      = "grafana-operator-token"
+    namespace = "grafana-operator"
+  }
+
+  data = {
+    key = aws_grafana_workspace_service_account_token.grafana_operator_token.key
+  }
+}
+
+# The Grafana Instance for the Operator to use
+resource "kubernetes_manifest" "me_website_amg_instance" {
+  manifest = {
+    apiVersion = "grafana.integreatly.org/v1beta1"
+    kind       = "Grafana"
+    metadata = {
+      name      = "me-website-amg-instance"
+      namespace = "grafana-operator"
+      labels = {
+        dashboards = "amazon-managed-grafana"
+      }
+    }
+    spec = {
+      external = {
+        url = "https://${module.me_website_managed_grafana.workspace_endpoint}"
+        apiKeySecret = {
+          name = kubernetes_secret_v1.grafana_operator_token_secret.metadata[0].name
+          key  = "key"
+        }
+      }
+    }
+  }
+}
