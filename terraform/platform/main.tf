@@ -642,26 +642,13 @@ resource "kubernetes_secret_v1" "grafana_operator_token_secret" {
   }
 }
 
-# The Grafana Instance for the Operator to use
-resource "kubernetes_manifest" "me_website_amg_instance" {
-  manifest = {
-    apiVersion = "grafana.integreatly.org/v1beta1"
-    kind       = "Grafana"
-    metadata = {
-      name      = "me-website-amg-instance"
-      namespace = "grafana-operator"
-      labels = {
-        dashboards = "amazon-managed-grafana"
-      }
-    }
-    spec = {
-      external = {
-        url = "https://${module.me_website_managed_grafana.workspace_endpoint}"
-        apiKeySecret = {
-          name = kubernetes_secret_v1.grafana_operator_token_secret.metadata[0].name
-          key  = "key"
-        }
-      }
-    }
-  }
+resource "helm_release" "grafana_kubernetes_operator" {
+  name       = "grafana-operator"
+  namespace        = "grafana-operator"
+  create_namespace = true
+  repository = "oci://ghcr.io/grafana/helm-charts"
+  chart      = "grafana-operator"
+  verify     = false
+  version    = "5.22.2"
+  wait       = true
 }
