@@ -655,6 +655,7 @@ resource "kubernetes_secret_v1" "grafana_operator_token_secret" {
 
 # The Grafana Instance for the Operator to use
 resource "kubernetes_manifest" "me_website_amg_instance" {
+  depends_on = [ helm_release.grafana_kubernetes_operator ]
   manifest = {
     apiVersion = "grafana.integreatly.org/v1beta1"
     kind       = "Grafana"
