@@ -86,14 +86,3 @@ module "eks" {
 
   tags = local.tags
 }
-
-resource "helm_release" "grafana_kubernetes_operator" {
-  name       = "grafana-operator"
-  namespace        = "grafana-operator"
-  create_namespace = true
-  repository = "oci://ghcr.io/grafana/helm-charts"
-  chart      = "grafana-operator"
-  verify     = false
-  version    = "5.22.2"
-  wait       = true
-}

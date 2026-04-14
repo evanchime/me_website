@@ -88,3 +88,8 @@ output "grafana_provider_token" {
   value = aws_grafana_workspace_service_account_token.grafana_provider_token.key
   sensitive = true
 }
+
+output "grafana_operator_token_secret_name" {
+  description = "The name of the Kubernetes secret containing the Grafana API token for the Grafana workspace created for the me_website application, which is used by the Grafana Operator to connect to the workspace."
+  value = kubernetes_secret_v1.grafana_operator_token_secret.metadata[0].name
+}
