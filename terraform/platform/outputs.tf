@@ -86,4 +86,5 @@ output "grafana_workspace_id" {
 output "grafana_provider_token" {
   description = "The Grafana API token for the Grafana workspace created for the me_website application."
   value = aws_grafana_workspace_service_account_token.grafana_provider_token.key
+  sensitive = true
 }
