@@ -576,10 +576,19 @@ module "me_website_managed_grafana" {
 resource "kubernetes_config_map_v1" "aws_logging" {
   metadata {
     name      = "aws-logging"
-    namespace = "aws-observability"
+    namespace = kubernetes_namespace_v1.aws_observability.metadata[0].name
   }
 
   data = {
+    "filters.conf" = <<EOF
+[FILTER]
+    Name parser
+    Match *
+    Key_Name log
+    Parser django-json
+    Reserve_Data True
+EOF
+
     "output.conf" = <<EOF
 [OUTPUT]
     Name cloudwatch_logs
@@ -597,15 +606,6 @@ EOF
     Time_Key asctime
     Time_Format %Y-%m-%dT%H:%M:%S
     Time_Keep On
-EOF
-
-    "filters.conf" = <<EOF
-[FILTER]
-    Name parser
-    Match *
-    Key_Name log
-    Parser django-json
-    Reserve_Data True
 EOF
   }
 }
