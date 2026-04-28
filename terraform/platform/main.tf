@@ -581,7 +581,7 @@ resource "kubernetes_config_map_v1" "aws_logging" {
     Name parser
     Match *
     Key_Name log
-    Parser django-json
+    Parser json
     Reserve_Data True
 EOF
 
@@ -597,7 +597,7 @@ EOF
 
     "parsers.conf" = <<EOF
 [PARSER]
-    Name django-json
+    Name json
     Format json
     Time_Key asctime
     Time_Format %Y-%m-%dT%H:%M:%S
