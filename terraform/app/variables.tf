@@ -62,15 +62,3 @@ variable "me_website_allowed_hosts" {
     type        = string
     default     = ".iplayishow.com,localhost,127.0.0.1"
 }
-
-variable "grafana_api_key" {
-  description = "Token for the Terraform Provider"
-  type        = string
-  sensitive   = true
-}
-
-variable "amg_service_account_token" {
-  description = "Token for the Grafana Operator K8s Secret"
-  type        = string
-  sensitive   = true
-}
