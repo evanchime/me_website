@@ -897,4 +897,3 @@ resource "aws_grafana_role_association" "me_admin" {
   user_ids     = [aws_identitystore_user.me.user_id]
   workspace_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_id
 }
-
