@@ -808,7 +808,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
         volume {
           name = "adot-infra-config-volume"
           config_map {
-            name = data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_adot_infra_config_map
+            name = data.terraform_remote_state.me_website_k8s_platform.outputs.adot_infra_config_map
           }
         }
       }
