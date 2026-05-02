@@ -863,8 +863,9 @@ resource "kubernetes_manifest" "me_website_amg_instance" {
     }
     spec = {
       external = {
-        url = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url 
-        apiKeySecret = {
+        url = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url
+        tenantNamespace = "grafana-operator" 
+        apiKey = {
           name = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_token_secret_name
           key  = "key"
         }
