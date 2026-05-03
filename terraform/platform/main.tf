@@ -626,18 +626,6 @@ resource "aws_grafana_workspace_service_account_token" "grafana_provider_token" 
   seconds_to_live    = 7200
 }
 
-# The Secret for the AMG Tokens
-resource "kubernetes_secret_v1" "grafana_operator_token_secret" {
-  metadata {
-    name      = "grafana-operator-token"
-    namespace = "grafana-operator"
-  }
-
-  data = {
-    key = aws_grafana_workspace_service_account_token.grafana_operator_token.key
-  }
-}
-
 resource "helm_release" "grafana_kubernetes_operator" {
   name       = "grafana-operator"
   namespace        = "grafana-operator"
@@ -647,4 +635,38 @@ resource "helm_release" "grafana_kubernetes_operator" {
   verify     = false
   version    = "5.22.2"
   wait       = true
+}
+
+resource "random_id" "secret_suffix" { byte_length = 4 } 
+
+resource "aws_secretsmanager_secret" "grafana_provider_token" {
+  name        = "grafana/provider-token-${random_id.suffix.hex}"
+  description = "Managed Grafana Service Account Token for the EKS provider"
+}
+
+resource "aws_secretsmanager_secret_version" "initial_grafana_provider_token" {
+  secret_id     = aws_secretsmanager_secret.grafana_provider_token.id
+  secret_string = aws_grafana_workspace_service_account_token.grafana_provider_token.key
+}
+
+resource "aws_secretsmanager_secret" "grafana_operator_token" {
+  name        = "grafana/operator-token-${random_id.secret_suffix.hex}"
+  description = "Managed Grafana Service Account Token for the EKS Operator"
+}
+
+resource "aws_secretsmanager_secret_version" "initial_grafana_operator_token" {
+  secret_id     = aws_secretsmanager_secret.grafana_operator_token.id
+  secret_string = aws_grafana_workspace_service_account_token.grafana_operator_token.key
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "grafana_operator_token" {
+  secret_id     = aws_secretsmanager_secret.grafana_operator_token.id
+  rotation_lambda_arn = aws_lambda_function.sa_grafana_lambda.arn
+  rotation_rules {
+    automatically_after_days = 29
+  }
 }

@@ -2,9 +2,17 @@ provider "aws" {
   region = data.terraform_remote_state.me_website_k8s_platform.outputs.region
 }
 
+data "aws_secretsmanager_secret_version" "grafana_provider_token" {
+  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_provider_secret_id
+}
+
+data "aws_secretsmanager_secret_version" "grafana_operator_token" {
+  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_secret_id
+}
+
 provider "grafana" {
   url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
-  auth = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_provider_token
+  auth = data.aws_secretsmanager_secret_version.grafana_provider_token.secret_string
 }
 
 data "aws_eks_cluster" "cluster" {
@@ -850,7 +858,19 @@ resource "kubernetes_manifest" "me_website_grafana_dashboard" {
 }
 
 # The Grafana Instance for the Operator to use
+resource "kubernetes_secret_v1" "grafana_operator_token_secret" {
+  metadata {
+    name      = "grafana-operator-token"
+    namespace = "grafana-operator"
+  }
+
+  data = {
+    token = data.aws_secretsmanager_secret_version.grafana_operator_token.secret_string
+  }
+}
+
 resource "kubernetes_manifest" "me_website_amg_instance" {
+  depends_on = [kubernetes_secret_v1.grafana_operator_token_secret]
   manifest = {
     apiVersion = "grafana.integreatly.org/v1beta1"
     kind       = "Grafana"
@@ -866,8 +886,9 @@ resource "kubernetes_manifest" "me_website_amg_instance" {
         url = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url
         tenantNamespace = "grafana-operator" 
         apiKey = {
-          name = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_token_secret_name
-          key  = "key"
+           name = kubernetes_secret_v1.grafana_operator_token_secret.metadata[0].name
+           key  = "token"
+
         }
       }
     }
