@@ -15,30 +15,27 @@ provider "grafana" {
   auth = data.aws_secretsmanager_secret_version.grafana_provider_token.secret_string
 }
 
-data "aws_eks_cluster" "cluster" {
-  name = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name
-}
-
 provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  host                   = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_endpoint
+  cluster_ca_certificate = base64decode(data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_certificate_authority_data)
 
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
+    args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name]
   }
+
 }
 
 provider "helm" {
   kubernetes {
-    host                   = data.aws_eks_cluster.cluster.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    host                   = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_endpoint
+    cluster_ca_certificate = base64decode(data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_certificate_authority_data)
 
     exec {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.cluster.name]
+      args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name]
     }
   }
 }
