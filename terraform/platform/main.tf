@@ -706,6 +706,8 @@ resource "aws_secretsmanager_secret_rotation" "grafana_operator_token" {
 }
 
 resource "helm_release" "external_secrets" {
+  depends_on = [helm_release.cert_manager]
+
   name             = "external-secrets"
   repository       = "https://external-secrets.io"
   chart            = "external-secrets"
@@ -723,9 +725,36 @@ resource "helm_release" "external_secrets" {
       # Fargate critical: Avoid port 10250
       name  = "webhook.port"
       value = "9443"
+    },
+    {
+      # This tells ESO to let cert-manager handle the certificates
+      name  = "webhook.certManager.enabled"
+      value = "true"
     }
   ]
 }
+
+resource "helm_release" "cert_manager" {
+  name = "cert-manager"
+
+  repository = "oci://quay.io/jetstack/charts"
+  chart      = "cert-manager"
+  version    = "1.20.2" 
+
+  namespace        = "cert-manager"
+  create_namespace = true
+
+  wait = true 
+  wait_for_jobs = true 
+
+  set = [
+    {
+      name  = "crds.enabled"
+      value = "true"
+    }
+  ]
+}
+
 
 # SecretStore: Defines HOW to talk to AWS
 resource "kubernetes_manifest" "aws_secret_store" {
