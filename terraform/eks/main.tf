@@ -81,6 +81,14 @@ module "eks" {
       ]
     }
 
+    external_secrets = {
+      name       = "fp-external-secrets"
+      subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
+      selectors = [
+        { namespace = "external-secrets" }
+      ]
+    }
+
   }
 
   tags = local.tags
