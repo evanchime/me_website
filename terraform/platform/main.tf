@@ -341,6 +341,35 @@ module "eks_primary_security_group" {
         source_security_group_id = module.alb_security_group.security_group_id
         description              = "Allow ALB to reach me-website pods"
     },
+    {
+        from_port                = 8888
+        to_port                  = 8888
+        protocol                 = "tcp"
+        # Use self-reference so the cluster can reach its own telemetry
+        source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        description              = "Allow internal metrics scraping for ADOT Collector"
+    },
+    {
+        from_port                = 9443
+        to_port                  = 9443
+        protocol                 = "tcp"
+        source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        description              = "Allow EKS Control Plane to reach External Secrets Webhook"
+    },
+    {
+        from_port                = 10260
+        to_port                  = 10260
+        protocol                 = "tcp"
+        source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        description              = "Allow EKS Control Plane to reach cert-manager Webhook"
+    },
+    {
+        from_port                = 10250
+        to_port                  = 10250
+        protocol                 = "tcp"
+        source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
+        description              = "Allow EKS Control Plane to reach Kubelet/Metrics"
+    },
     { 
       rule                     = "dns-tcp"
       source_security_group_id = module.fargate_app_sg.security_group_id
@@ -751,7 +780,12 @@ resource "helm_release" "cert_manager" {
     {
       name  = "crds.enabled"
       value = "true"
-    }
+    },
+    {
+      # Fargate critical: Avoid port 10250
+      name  = "webhook.port"
+      value = "10250"
+    },
   ]
 }
 
