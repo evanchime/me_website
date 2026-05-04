@@ -90,12 +90,26 @@ resource "kubernetes_namespace_v1" "aws_observability" {
   }
 }
 
+resource "kubernetes_namespace_v1" "external_secrets" {
+  metadata { name = "external-secrets" }
+}
+
 resource "kubernetes_service_account_v1" "adot_collector" {
   metadata {
     name      = "adot-collector-service-account"
     namespace = kubernetes_namespace_v1.adot_col.metadata[0].name
     annotations = {
       "eks.amazonaws.com/role-arn" = module.me_website_adot_infra_irsa.arn
+    }
+  }
+}
+
+resource "kubernetes_service_account_v1" "external_secrets" {
+  metadata {
+    name      = "external-secrets"
+    namespace = kubernetes_namespace_v1.external_secrets.metadata[0].name
+    annotations = {
+      "eks.amazonaws.com/role-arn" = module.external_secrets_irsa_role.iam_role_arn
     }
   }
 }
@@ -474,6 +488,26 @@ module "me_website_adot_infra_irsa" {
   }
 }
 
+module "external_secrets_irsa_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.2"
+
+  name = "${local.cluster_name}external-secrets"
+
+  policies = {
+    policy = aws_iam_policy.external_secrets_policy.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = data.terraform_remote_state.me_website_k8s_eks.outputs.oidc_provider_arn
+      namespace_service_accounts = ["external-secrets:external-secrets"]
+    }
+  }
+
+  tags = local.tags
+}
+
 resource "aws_prometheus_workspace" "me_website_prometheus" {
   alias = "me-website-metrics"
 
@@ -668,5 +702,80 @@ resource "aws_secretsmanager_secret_rotation" "grafana_operator_token" {
   rotation_lambda_arn = aws_lambda_function.sa_grafana_lambda.arn
   rotation_rules {
     automatically_after_days = 29
+  }
+}
+
+resource "helm_release" "external_secrets" {
+  name             = "external-secrets"
+  repository       = "https://external-secrets.io"
+  chart            = "external-secrets"
+  namespace        = kubernetes_namespace_v1.external_secrets.metadata[0].name
+  version          = "2.4.1"
+  wait = true 
+  wait_for_jobs = true 
+
+  set = [
+    {
+      name  = "installCRDs"
+      value = "true"
+    },
+    {
+      # Fargate critical: Avoid port 10250
+      name  = "webhook.port"
+      value = "9443"
+    }
+  ]
+}
+
+# SecretStore: Defines HOW to talk to AWS
+resource "kubernetes_manifest" "aws_secret_store" {
+  depends_on = [helm_release.external_secrets]
+  manifest = {
+    apiVersion = "external-secrets.io/v1"
+    kind       = "SecretStore"
+    metadata = {
+      name      = "aws-secret-store"
+      namespace = "grafana-operator"
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          region  = data.aws_region.current.name
+        }
+      }
+    }
+  }
+}
+
+# ExternalSecret: Defines WHAT secret to pull and how often
+resource "kubernetes_manifest" "grafana_token_sync" {
+  depends_on = [kubernetes_manifest.aws_secret_store]
+  manifest = {
+    apiVersion = "external-secrets.io/v1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "grafana-token-sync"
+      namespace = "grafana-operator"
+    }
+    spec = {
+      refreshInterval = "1h" # ESO checks AWS for rotations every hour
+      secretStoreRef = {
+        name = "aws-secret-store"
+        kind = "SecretStore"
+      }
+      target = {
+        name = "grafana-operator-token"
+        creationPolicy = "Owner"
+      }
+      data = [
+        {
+          secretKey = "token"
+          remoteRef = {
+            key = aws_secretsmanager_secret.grafana_operator_token.name
+          }
+        }
+      ]
+    }
   }
 }
