@@ -143,3 +143,18 @@ resource "aws_iam_role_policy" "me_website_logging" {
     }]
   })
 }
+
+# The IAM Policy allowing access to the specific secret
+resource "aws_iam_policy" "external_secrets_policy" {
+  name        = "ExternalSecretsPolicy"
+  description = "Allows ESO to read the Grafana token from Secrets Manager"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+      Resource = [aws_secretsmanager_secret.grafana_operator_token.arn]
+    }]
+  })
+}
