@@ -703,7 +703,7 @@ resource "helm_release" "grafana_kubernetes_operator" {
 resource "random_id" "secret_suffix" { byte_length = 4 } 
 
 resource "aws_secretsmanager_secret" "grafana_provider_token" {
-  name        = "grafana/provider-token-${random_id.suffix.hex}"
+  name        = "grafana/provider-token-${random_id.secret_suffix.hex}"
   description = "Managed Grafana Service Account Token for the EKS provider"
 }
 
@@ -728,7 +728,7 @@ resource "aws_secretsmanager_secret_version" "initial_grafana_operator_token" {
 
 resource "aws_secretsmanager_secret_rotation" "grafana_operator_token" {
   secret_id     = aws_secretsmanager_secret.grafana_operator_token.id
-  rotation_lambda_arn = aws_lambda_function.sa_grafana_lambda.arn
+  rotation_lambda_arn = aws_lambda_function.grafana_operator_token_rotation_lambda.arn
   rotation_rules {
     automatically_after_days = 29
   }
@@ -841,4 +841,47 @@ resource "kubernetes_manifest" "grafana_token_sync" {
       ]
     }
   }
+}
+
+resource "aws_lambda_function" "grafana_operator_token_rotation_lambda" {
+  function_name    = "grafana-operator-token-rotation"
+  runtime          = "python3.12"
+  handler          = "secrets_lambda.lambda_handler"
+  role             = aws_iam_role.grafana_operator_token_rotator_role.arn
+  timeout          = 60
+  memory_size      = 128
+  filename         = data.archive_file.lambda_package.output_path
+  source_code_hash = data.archive_file.lambda_package.output_base64sha256
+
+  layers = [aws_lambda_layer_version.grafana_operator_token_rotation_layer.arn]
+
+  environment {
+    variables = {
+      GRAFANA_TOKEN_NAME           = aws_grafana_workspace_service_account_token.grafana_operator_token.name
+      GRAFANA_SERVICE_ACCOUNT_NAME = aws_grafana_workspace_service_account.this.name
+      GRAFANA_WORKSPACE_ID         = module.me_website_managed_grafana.workspace_id
+      GRAFANA_URL                  = module.me_website_managed_grafana.workspace_endpoint
+    }
+  }
+}
+
+resource "aws_lambda_layer_version" "grafana_operator_token_rotation_layer" {
+  layer_name               = "boto3_v134144_lambda_layer"
+  compatible_runtimes      = ["python3.12", "python3.13"]
+  compatible_architectures = ["x86_64"]
+  filename                 = "${path.module}/layer/python.zip"
+}
+
+data "archive_file" "grafana_operator_token_rotation" {
+  type        = "zip"
+  source_file = "${path.module}/src/secrets_lambda.py"
+  output_path = "${path.module}/lambda/grafana_operator_token_rotation.zip" 
+}
+
+resource "aws_lambda_permission" "secrets_manager_invoke_permission" {
+  statement_id  = "AllowSecretsManagerInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.grafana_operator_token_rotation_lambda.function_name
+  principal     = "secretsmanager.amazonaws.com"
+  source_arn    = aws_secretsmanager_secret.grafana_operator_token.arn
 }

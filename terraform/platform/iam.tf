@@ -158,3 +158,61 @@ resource "aws_iam_policy" "external_secrets_policy" {
     }]
   })
 }
+
+resource "aws_iam_role" "grafana_operator_token_rotator_role" {
+  name = "grafana-operator-token-rotator-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "grafana_operator_token_rotation_policy" {
+  name = "GrafanaOperatorTokenRotationPolicy"
+  role = aws_iam_role.grafana_operator_token_rotator_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # 1. Manage Service Account Tokens in Grafana
+      {
+        Effect = "Allow"
+        Action = [
+          "grafana:CreateWorkspaceServiceAccountToken",
+          "grafana:DeleteWorkspaceServiceAccountToken",
+          "grafana:ListWorkspaceServiceAccounts",
+          "grafana:ListWorkspaceServiceAccountTokens"
+        ]
+        Resource = "arn:aws:grafana:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:/workspaces/${module.me_website_managed_grafana.workspace_id}"
+      },
+      # 2. Update the Secret in Secrets Manager
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:UpdateSecretVersionStage"
+        ]
+        Resource = aws_secretsmanager_secret.grafana_token.arn
+      },
+      # 3. Basic Logging
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
