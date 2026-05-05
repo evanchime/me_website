@@ -916,3 +916,54 @@ resource "aws_grafana_role_association" "me_admin" {
   user_ids     = [aws_identitystore_user.me.user_id]
   workspace_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_id
 }
+
+# SecretStore: Defines HOW to talk to AWS
+resource "kubernetes_manifest" "aws_secret_store" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1"
+    kind       = "SecretStore"
+    metadata = {
+      name      = "aws-secret-store"
+      namespace = "grafana-operator"
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          region  = data.aws_region.current.region
+        }
+      }
+    }
+  }
+}
+
+# ExternalSecret: Defines WHAT secret to pull and how often
+resource "kubernetes_manifest" "grafana_token_sync" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "grafana-token-sync"
+      namespace = "grafana-operator"
+    }
+    spec = {
+      refreshInterval = "1h" # ESO checks AWS for rotations every hour
+      secretStoreRef = {
+        name = "aws-secret-store"
+        kind = "SecretStore"
+      }
+      target = {
+        name = "grafana-operator-token"
+        creationPolicy = "Owner"
+      }
+      data = [
+        {
+          secretKey = "token"
+          remoteRef = {
+            key = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_secret_name
+          }
+        }
+      ]
+    }
+  }
+}
