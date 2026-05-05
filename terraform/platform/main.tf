@@ -788,60 +788,6 @@ resource "helm_release" "cert_manager" {
   }
 }
 
-
-# SecretStore: Defines HOW to talk to AWS
-resource "kubernetes_manifest" "aws_secret_store" {
-  depends_on = [helm_release.external_secrets]
-  manifest = {
-    apiVersion = "external-secrets.io/v1"
-    kind       = "SecretStore"
-    metadata = {
-      name      = "aws-secret-store"
-      namespace = "grafana-operator"
-    }
-    spec = {
-      provider = {
-        aws = {
-          service = "SecretsManager"
-          region  = data.aws_region.current.region
-        }
-      }
-    }
-  }
-}
-
-# ExternalSecret: Defines WHAT secret to pull and how often
-resource "kubernetes_manifest" "grafana_token_sync" {
-  depends_on = [kubernetes_manifest.aws_secret_store]
-  manifest = {
-    apiVersion = "external-secrets.io/v1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "grafana-token-sync"
-      namespace = "grafana-operator"
-    }
-    spec = {
-      refreshInterval = "1h" # ESO checks AWS for rotations every hour
-      secretStoreRef = {
-        name = "aws-secret-store"
-        kind = "SecretStore"
-      }
-      target = {
-        name = "grafana-operator-token"
-        creationPolicy = "Owner"
-      }
-      data = [
-        {
-          secretKey = "token"
-          remoteRef = {
-            key = aws_secretsmanager_secret.grafana_operator_token.name
-          }
-        }
-      ]
-    }
-  }
-}
-
 resource "aws_lambda_function" "grafana_operator_token_rotation_lambda" {
   function_name    = "grafana-operator-token-rotation"
   runtime          = "python3.12"
