@@ -803,7 +803,7 @@ resource "kubernetes_manifest" "aws_secret_store" {
       provider = {
         aws = {
           service = "SecretsManager"
-          region  = data.aws_region.current.name
+          region  = data.aws_region.current.region
         }
       }
     }
