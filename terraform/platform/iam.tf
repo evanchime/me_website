@@ -6,6 +6,8 @@ locals {
   external_dns_policy    = "${path.module}/policy/external-dns-route53.json"
 }
 
+data "aws_region" "current" {}
+
 data "aws_iam_policy_document" "external_dns_assume_role" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -190,7 +192,7 @@ resource "aws_iam_role_policy" "grafana_operator_token_rotation_policy" {
           "grafana:ListWorkspaceServiceAccounts",
           "grafana:ListWorkspaceServiceAccountTokens"
         ]
-        Resource = "arn:aws:grafana:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:/workspaces/${module.me_website_managed_grafana.workspace_id}"
+        Resource = "arn:aws:grafana:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:/workspaces/${module.me_website_managed_grafana.workspace_id}"
       },
       # 2. Update the Secret in Secrets Manager
       {
@@ -201,7 +203,7 @@ resource "aws_iam_role_policy" "grafana_operator_token_rotation_policy" {
           "secretsmanager:DescribeSecret",
           "secretsmanager:UpdateSecretVersionStage"
         ]
-        Resource = aws_secretsmanager_secret.grafana_token.arn
+        Resource = aws_secretsmanager_secret.grafana_operator_token.arn
       },
       # 3. Basic Logging
       {
