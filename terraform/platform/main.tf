@@ -109,7 +109,7 @@ resource "kubernetes_service_account_v1" "external_secrets" {
     name      = "external-secrets"
     namespace = kubernetes_namespace_v1.external_secrets.metadata[0].name
     annotations = {
-      "eks.amazonaws.com/role-arn" = module.external_secrets_irsa_role.iam_role_arn
+      "eks.amazonaws.com/role-arn" = module.external_secrets_irsa_role.arn
     }
   }
 }
@@ -745,22 +745,22 @@ resource "helm_release" "external_secrets" {
   wait = true 
   wait_for_jobs = true 
 
-  set = [
-    {
-      name  = "installCRDs"
-      value = "true"
-    },
-    {
-      # Fargate critical: Avoid port 10250
-      name  = "webhook.port"
-      value = "9443"
-    },
-    {
-      # This tells ESO to let cert-manager handle the certificates
-      name  = "webhook.certManager.enabled"
-      value = "true"
-    }
-  ]
+  set {
+    name  = "installCRDs"
+    value = "true"
+  }
+  
+  set {
+    # Fargate critical: Avoid port 10250
+    name  = "webhook.port"
+    value = "9443"
+  }
+  
+  set {
+    # This tells ESO to let cert-manager handle the certificates
+    name  = "webhook.certManager.enabled"
+    value = "true"
+  }
 }
 
 resource "helm_release" "cert_manager" {
@@ -776,17 +776,16 @@ resource "helm_release" "cert_manager" {
   wait = true 
   wait_for_jobs = true 
 
-  set = [
-    {
-      name  = "crds.enabled"
-      value = "true"
-    },
-    {
-      # Fargate critical: Avoid port 10250
-      name  = "webhook.port"
-      value = "10250"
-    },
-  ]
+  set {
+    name  = "crds.enabled"
+    value = "true"
+  }
+
+  set {
+    # Fargate critical: Avoid port 10250
+    name  = "webhook.port"
+    value = "10250"
+  }
 }
 
 
@@ -850,8 +849,8 @@ resource "aws_lambda_function" "grafana_operator_token_rotation_lambda" {
   role             = aws_iam_role.grafana_operator_token_rotator_role.arn
   timeout          = 60
   memory_size      = 128
-  filename         = data.archive_file.lambda_package.output_path
-  source_code_hash = data.archive_file.lambda_package.output_base64sha256
+  filename         = data.archive_file.grafana_operator_token_rotation.output_path
+  source_code_hash = data.archive_file.grafana_operator_token_rotation.output_base64sha256
 
   layers = [aws_lambda_layer_version.grafana_operator_token_rotation_layer.arn]
 
