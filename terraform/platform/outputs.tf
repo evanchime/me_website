@@ -83,14 +83,14 @@ output "grafana_workspace_id" {
   value = module.me_website_managed_grafana.workspace_id
 }
 
-output "grafana_provider_secret_id" {
-  description = "The ID of the Secrets Manager secret containing the Grafana API token for the Grafana provider"
+output "grafana_provider_secret_name" {
+  description = "The name of the Secrets Manager secret containing the Grafana API token for the Grafana provider"
   sensitive = true
-  value     = aws_secretsmanager_secret.grafana_provider_token.id
+  value     = aws_secretsmanager_secret.grafana_provider_token.name
 }
 
-output "grafana_operator_secret_id" {
-  description = "The ID of the Secrets Manager secret containing the Grafana API token for the Grafana Operator to connect to the workspace."
+output "grafana_operator_secret_name" {
+  description = "The name of the Secrets Manager secret containing the Grafana API token for the Grafana Operator to connect to the workspace."
   sensitive = true
-  value     = aws_secretsmanager_secret.grafana_operator_token.id
+  value     = aws_secretsmanager_secret.grafana_operator_token.name
 }
