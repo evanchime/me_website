@@ -3,11 +3,11 @@ provider "aws" {
 }
 
 data "aws_secretsmanager_secret_version" "grafana_provider_token" {
-  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_provider_secret_id
+  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_provider_secret_name
 }
 
 data "aws_secretsmanager_secret_version" "grafana_operator_token" {
-  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_secret_id
+  secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_secret_name
 }
 
 provider "grafana" {
