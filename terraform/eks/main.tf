@@ -85,8 +85,7 @@ module "eks" {
       name       = "fp-external-secrets"
       subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
       selectors = [
-        { namespace = "external-secrets" },
-        { namespace = "cert-manager" }
+        { namespace = "external-secrets" }
       ]
     }
 

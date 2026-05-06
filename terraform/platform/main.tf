@@ -104,16 +104,6 @@ resource "kubernetes_service_account_v1" "adot_collector" {
   }
 }
 
-resource "kubernetes_service_account_v1" "external_secrets" {
-  metadata {
-    name      = "external-secrets"
-    namespace = kubernetes_namespace_v1.external_secrets.metadata[0].name
-    annotations = {
-      "eks.amazonaws.com/role-arn" = module.external_secrets_irsa_role.arn
-    }
-  }
-}
-
 resource "kubernetes_cluster_role_v1" "adot_infra" {
   metadata {
     name = "adotcol-admin-role"
@@ -355,13 +345,6 @@ module "eks_primary_security_group" {
         protocol                 = "tcp"
         source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
         description              = "Allow EKS Control Plane to reach External Secrets Webhook"
-    },
-    {
-        from_port                = 10260
-        to_port                  = 10260
-        protocol                 = "tcp"
-        source_security_group_id = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_primary_security_group_id
-        description              = "Allow EKS Control Plane to reach cert-manager Webhook"
     },
     {
         from_port                = 10250
@@ -735,15 +718,23 @@ resource "aws_secretsmanager_secret_rotation" "grafana_operator_token" {
 }
 
 resource "helm_release" "external_secrets" {
-  depends_on = [helm_release.cert_manager]
-
   name             = "external-secrets"
   repository       = "https://external-secrets.io"
   chart            = "external-secrets"
   namespace        = kubernetes_namespace_v1.external_secrets.metadata[0].name
   version          = "2.4.1"
   wait = true 
-  wait_for_jobs = true 
+  wait_for_jobs = true
+
+  set {
+    name  = "serviceAccount.name"
+    value = "external-secrets"
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.external_secrets_irsa_role.arn
+  } 
 
   set {
     name  = "installCRDs"
@@ -754,37 +745,6 @@ resource "helm_release" "external_secrets" {
     # Fargate critical: Avoid port 10250
     name  = "webhook.port"
     value = "9443"
-  }
-  
-  set {
-    # This tells ESO to let cert-manager handle the certificates
-    name  = "webhook.certManager.enabled"
-    value = "true"
-  }
-}
-
-resource "helm_release" "cert_manager" {
-  name = "cert-manager"
-
-  repository = "oci://quay.io/jetstack/charts"
-  chart      = "cert-manager"
-  version    = "1.20.2" 
-
-  namespace        = "cert-manager"
-  create_namespace = true
-
-  wait = true 
-  wait_for_jobs = true 
-
-  set {
-    name  = "crds.enabled"
-    value = "true"
-  }
-
-  set {
-    # Fargate critical: Avoid port 10250
-    name  = "webhook.port"
-    value = "10250"
   }
 }
 
