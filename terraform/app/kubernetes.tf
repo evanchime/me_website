@@ -10,6 +10,8 @@ data "aws_secretsmanager_secret_version" "grafana_operator_token" {
   secret_id = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_operator_secret_name
 }
 
+data "aws_region" "current" {}
+
 provider "grafana" {
   url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
   auth = data.aws_secretsmanager_secret_version.grafana_provider_token.secret_string
@@ -849,8 +851,8 @@ resource "kubernetes_manifest" "me_website_grafana_dashboard" {
           dashboards = "amazon-managed-grafana"
         }
       }
+      json = file("${path.module}/grafana-dashboard.json")
     }
-    json = file("${path.module}/grafana-dashboard.json")
   }
 }
 
