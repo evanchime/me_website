@@ -13,7 +13,7 @@ data "aws_secretsmanager_secret_version" "grafana_operator_token" {
 data "aws_region" "current" {}
 
 provider "grafana" {
-  url  = "https://${data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url}"
+  url  = data.terraform_remote_state.me_website_k8s_platform.outputs.grafana_workspace_url
   auth = data.aws_secretsmanager_secret_version.grafana_provider_token.secret_string
 }
 
