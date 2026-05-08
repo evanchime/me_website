@@ -768,7 +768,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
   }
 
   spec {
-    service_name = "adot-collector-service"
+    service_name = kubernetes_service_v1.adot_collector_service.metadata[0].name
     replicas     = 1
 
     selector {
@@ -781,7 +781,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
       }
 
       spec {
-        service_account_name = "adot-collector"
+        service_account_name = data.terraform_remote_state.me_website_k8s_platform.outputs.adot_collector_service_account
         
         container {
           name    = "adot-collector"

@@ -94,7 +94,7 @@ resource "kubernetes_namespace_v1" "external_secrets" {
   metadata { name = "external-secrets" }
 }
 
-resource "kubernetes_service_account_v1" "adot_collector" {
+resource "kubernetes_service_account_v1" "adot_collector_service_account" {
   metadata {
     name      = "adot-collector-service-account"
     namespace = kubernetes_namespace_v1.adot_col.metadata[0].name
@@ -135,7 +135,7 @@ resource "kubernetes_cluster_role_binding_v1" "adot_infra" {
 
   subject {
     kind      = "ServiceAccount"
-    name      = "adot-collector-service-account"
+    name      = kubernetes_service_account_v1.adot_collector_service_account.metadata[0].name
     namespace = kubernetes_namespace_v1.adot_col.metadata[0].name
   }
 }
