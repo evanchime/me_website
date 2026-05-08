@@ -94,3 +94,8 @@ output "grafana_operator_secret_name" {
   sensitive = true
   value     = aws_secretsmanager_secret.grafana_operator_token.name
 }
+
+output "adot_collector_service_account" {
+  description = "The name of the Kubernetes Service Account used by the ADOT Collector."
+  value       = kubernetes_service_account_v1.adot_collector_service_account.metadata[0].name
+}
