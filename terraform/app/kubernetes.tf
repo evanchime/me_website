@@ -263,7 +263,6 @@ resource "kubernetes_deployment_v1" "me_website" {
           volume_mount {
             name       = "adot-config-volume"
             mount_path = "/etc/otel-config.yaml"
-            sub_path   = "otel-config.yaml"
           }
         }
 
@@ -808,7 +807,6 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
           volume_mount {
             name       = "adot-infra-config-volume"
             mount_path = "/etc/otel-config.yaml"
-            sub_path   = "otel-config.yaml"
           }
         }
 
