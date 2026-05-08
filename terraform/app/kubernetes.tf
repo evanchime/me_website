@@ -245,7 +245,7 @@ resource "kubernetes_deployment_v1" "me_website" {
           name    = "adot-collector"
           image   = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
           command = ["/awscollector"]
-          args    = ["--config=/etc/otel-config.yaml"]
+          args    = ["--config=/etc/otel/otel-config.yaml"]
 
           port {
             container_port = 4317 # OTLP gRPC
@@ -262,7 +262,8 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           volume_mount {
             name       = "adot-config-volume"
-            mount_path = "/etc/otel-config.yaml"
+            mount_path = "/etc/otel"
+            read_only  = true
           }
         }
 
@@ -270,6 +271,10 @@ resource "kubernetes_deployment_v1" "me_website" {
           name = "adot-config-volume"
           config_map {
             name = kubernetes_config_map_v1.adot_app_config.metadata[0].name
+            items {
+              key  = "otel-config.yaml"
+              path = "otel-config.yaml"
+            }
           }
         }
       }
@@ -786,7 +791,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
           name    = "adot-collector"
           image   = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
           command = ["/awscollector"]
-          args    = ["--config=/etc/otel-config.yaml"]
+          args    = ["--config=/etc/otel/otel-config.yaml"]
 
           resources {
             limits = {
@@ -806,7 +811,8 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
 
           volume_mount {
             name       = "adot-infra-config-volume"
-            mount_path = "/etc/otel-config.yaml"
+            mount_path = "/etc/otel"
+            read_only  = true
           }
         }
 
@@ -814,6 +820,10 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
           name = "adot-infra-config-volume"
           config_map {
             name = data.terraform_remote_state.me_website_k8s_platform.outputs.adot_infra_config_map
+            items {
+              key  = "otel-config.yaml"
+              path = "otel-config.yaml"
+            }
           }
         }
       }
