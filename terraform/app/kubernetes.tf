@@ -640,6 +640,8 @@ resource "kubernetes_service_v1" "adot_collector_service" {
     }
 
     type = "ClusterIP"
+
+    cluster_ip = "None" # Headless service for stable network ID
   }
 }
 
