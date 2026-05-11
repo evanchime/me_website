@@ -60,7 +60,8 @@ module "eks" {
       subnet_ids = data.terraform_remote_state.me_website_k8s_network.outputs.private_subnet_ids
       selectors = [
         { namespace = "kube-system" },
-        { namespace = "default" }
+        { namespace = "default" },
+        { namespace = "external-dns" }
       ]
     }
 
