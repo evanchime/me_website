@@ -762,7 +762,7 @@ resource "aws_route53_record" "alb_cname" {
   name    = "alb"
   type    = "CNAME"
   ttl     = 60
-  records = [kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname]
+  records = [try(kubernetes_ingress_v1.me_website_app_ingress.status[0].load_balancer[0].ingress[0].hostname, "pending-provisioning.com")]
 }
 
 resource "kubernetes_stateful_set_v1" "adot_infra" {
