@@ -808,12 +808,12 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
 
           resources {
             limits = {
-              cpu    = "256m"
-              memory = "512Mi"
+              cpu    = "1"
+              memory = "2Gi"
             }
             requests = {
-              cpu    = "256m"
-              memory = "512Mi"
+              cpu    = "1"
+              memory = "2Gi"
             }
           }
 
