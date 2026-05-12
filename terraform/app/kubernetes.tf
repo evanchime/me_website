@@ -230,12 +230,12 @@ resource "kubernetes_deployment_v1" "me_website" {
 
           resources {
             requests = {
-              cpu    = "200m"
-              memory = "512Mi"
+              cpu    = "500m"
+              memory = "1Gi"
             }
             limits = {
-              cpu    = "1"
-              memory = "1Gi"
+              cpu    = "1.5"
+              memory = "2Gi"
             }
           }
         }
@@ -264,6 +264,17 @@ resource "kubernetes_deployment_v1" "me_website" {
             name       = "adot-config-volume"
             mount_path = "/etc/otel"
             read_only  = true
+          }
+
+          resources {
+            requests = {
+              cpu    = "300m"
+              memory = "512Mi"
+            }
+            limits = {
+              cpu    = "1"
+              memory = "1Gi"
+            }
           }
         }
 
