@@ -531,50 +531,72 @@ resource "kubernetes_config_map_v1" "adot_infra_config" {
     name      = "adot-infra-config"
     namespace = "adot-col"
   }
-
+  
   data = {
-    "otel-config.yaml" = <<EOF
-extensions:
-  sigv4auth:
-    region: "${data.terraform_remote_state.me_website_k8s_eks.outputs.region}"
-    service: "aps"
+    "otel-config.yaml" = yamlencode({
+      extensions = {
+        sigv4auth = {
+          region  = data.terraform_remote_state.me_website_k8s_eks.outputs.region
+          service = "aps"
+        }
+      }
 
-receivers:
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: 'kubernetes-nodes-cadvisor'
-          scheme: https
-          authorization:
-            type: Bearer
-            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-          tls_config:
-            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-            insecure_skip_verify: true
-          kubernetes_sd_configs:
-            - role: node
-          relabel_configs:
-            - action: replace
-              replacement: kubernetes.default.svc:443
-              target_label: __address__
-            - source_labels: [__meta_kubernetes_node_name]
-              regex: (.+)
-              target_label: __metrics_path__
-              replacement: '/api/v1/nodes/$$${1}/proxy/metrics/cadvisor'
+      receivers = {
+        prometheus = {
+          config = {
+            scrape_configs = [
+              {
+                job_name = "kubernetes-nodes-cadvisor"
+                scheme   = "https"
+                authorization = {
+                  type             = "Bearer"
+                  credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                }
+                tls_config = {
+                  ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                  insecure_skip_verify = true
+                }
+                kubernetes_sd_configs = [
+                  { role = "node" }
+                ]
+                relabel_configs = [
+                  {
+                    action       = "replace"
+                    replacement  = "kubernetes.default.svc:443"
+                    target_label = "__address__"
+                  },
+                  {
+                    source_labels = ["__meta_kubernetes_node_name"]
+                    regex         = "(.+)"
+                    target_label  = "__metrics_path__"
+                    replacement   = "/api/v1/nodes/$$${1}/proxy/metrics/cadvisor"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
 
-exporters:
-  prometheusremotewrite:
-    endpoint: "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
-    auth:
-      authenticator: sigv4auth
+      exporters = {
+        prometheusremotewrite = {
+          endpoint = "${aws_prometheus_workspace.me_website_prometheus.prometheus_endpoint}api/v1/remote_write"
+          auth = {
+            authenticator = "sigv4auth"
+          }
+        }
+      }
 
-service:
-  extensions: [sigv4auth]
-  pipelines:
-    metrics:
-      receivers: [prometheus]
-      exporters: [prometheusremotewrite]
-EOF
+      service = {
+        extensions = ["sigv4auth"]
+        pipelines = {
+          metrics = {
+            receivers = ["prometheus"]
+            exporters = ["prometheusremotewrite"]
+          }
+        }
+      }
+    })
   }
 }
 
