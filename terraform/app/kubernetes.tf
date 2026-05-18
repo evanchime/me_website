@@ -782,6 +782,7 @@ resource "kubernetes_stateful_set_v1" "adot_infra" {
   metadata {
     name      = "adot-collector"
     namespace = data.terraform_remote_state.me_website_k8s_platform.outputs.adot_col_namespace
+    labels = { app = "aws-adot", component = "adot-collector" }
   }
 
   spec {
