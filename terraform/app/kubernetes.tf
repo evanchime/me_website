@@ -858,7 +858,10 @@ resource "grafana_data_source" "prometheus" {
 }
 
 resource "kubernetes_manifest" "me_website_grafana_dashboard" {
-  depends_on = [ kubernetes_manifest.me_website_amg_instance ]
+  depends_on = [ 
+    kubernetes_manifest.me_website_amg_instance,
+    grafana_data_source.prometheus 
+  ]
   manifest = {
     apiVersion = "grafana.integreatly.org/v1beta1"
     kind       = "GrafanaDashboard"
@@ -872,7 +875,9 @@ resource "kubernetes_manifest" "me_website_grafana_dashboard" {
           dashboards = "amazon-managed-grafana"
         }
       }
-      json = file("${path.module}/grafana-dashboard.json")
+      json = templatefile("${path.module}/grafana-dashboard.json", {
+        prometheus_uid = grafana_data_source.prometheus.uid
+      })
     }
   }
 }
