@@ -4,43 +4,59 @@
     {
       "title": "1. Request Latency (App)",
       "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_uid}"
+      },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "rate(django_http_requests_latency_seconds_sum[5m]) / rate(django_http_requests_latency_seconds_count[5m])",
-          "legendFormat": "Avg Latency (sec)"
+          "expr": "rate(http_server_duration_sum[5m]) / rate(http_server_duration_count[5m])",
+          "legendFormat": "Avg Latency (ms)"
         }
       ]
     },
     {
-      "title": "2. HTTP Status Codes",
+      "title": "2. HTTP Request Volume",
       "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_uid}"
+      },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(django_http_requests_total_by_status[5m])) by (status)",
-          "legendFormat": "Status: {{status}}"
+          "expr": "sum(rate(http_server_duration_count[5m])) by (http_status_code)",
+          "legendFormat": "Status: {{http_status_code}}"
         }
       ]
     },
     {
       "title": "3. Fargate CPU Usage",
       "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_uid}"
+      },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{container='django'}[5m]))",
-          "legendFormat": "vCPU Load"
+          "expr": "sum(rate(pod_cpu_usage_total[5m]))",
+          "legendFormat": "vCPU Usage (Total)"
         }
       ]
     },
     {
       "title": "4. Memory (Working Set)",
       "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_uid}"
+      },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
       "targets": [
         {
-          "expr": "container_memory_working_set_bytes{container='django'}",
+          "expr": "pod_memory_working_set",
           "legendFormat": "Memory Bytes"
         }
       ]
@@ -48,10 +64,14 @@
     {
       "title": "5. Network Outbound",
       "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_uid}"
+      },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(container_network_transmit_bytes_total[5m]))",
+          "expr": "sum(rate(pod_network_tx_bytes[5m]))",
           "legendFormat": "Bytes/sec Out"
         }
       ]
