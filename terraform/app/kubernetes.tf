@@ -851,17 +851,10 @@ resource "grafana_data_source" "prometheus" {
 
   json_data_encoded = jsonencode({
     httpMethod    = "POST"
-    sigv4Auth     = true
-    sigv4AuthType = "workspace-iam-role"
-    sigv4Region   = data.terraform_remote_state.me_website_k8s_platform.outputs.region
+    sigV4Auth     = true
+    sigV4AuthType = "ec2_iam_role"
+    sigV4Region   = data.terraform_remote_state.me_website_k8s_platform.outputs.region
   })
-
-  # Prevents Terraform from ever overwriting your manual UI checks
-  lifecycle {
-    ignore_changes = [
-      json_data_encoded
-    ]
-  }
 }
 
 resource "kubernetes_manifest" "me_website_grafana_dashboard" {
