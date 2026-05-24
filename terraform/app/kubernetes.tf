@@ -122,6 +122,11 @@ resource "kubernetes_deployment_v1" "me_website" {
             value = "true"
           }
 
+          env {
+            name  = "OTEL_SERVICE_NAME"
+            value = "me-website-django"
+          }
+
           # envFrom: ConfigMap + Secret
           env_from {
             config_map_ref {
