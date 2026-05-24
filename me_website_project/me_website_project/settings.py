@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import environ
+import socket
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,6 +35,13 @@ DEBUG = env.bool('DEBUG', default=False)
 
 # Fetch ALLOWED_HOSTS environment variable value and parse as a list.
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+
+# Dynamically stitch the Fargate pod's own private IP into the trusted list
+try:
+    pod_ip = socket.gethostbyname(socket.gethostname())
+    ALLOWED_HOSTS.append(pod_ip)
+except Exception:
+    pass
 
 # Application definition
 INSTALLED_APPS = [
