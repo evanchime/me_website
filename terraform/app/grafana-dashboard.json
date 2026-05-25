@@ -54,6 +54,21 @@
         "uid": "${prometheus_uid}"
       },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "max": 2147483648,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1073741824, "color": "orange" },
+              { "value": 1717986918, "color": "red" }
+            ]
+          }
+        }
+      },
       "targets": [
         {
           "expr": "sum(container_memory_working_set_bytes{container='me-website'})",
