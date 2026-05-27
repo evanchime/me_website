@@ -620,6 +620,15 @@ module "me_website_managed_grafana" {
     },
     plugins = {
       pluginAdminEnabled = true
+    },
+    smtp = {
+      enabled         = true
+      host            = "smtp.gmail.com:587"
+      user            = var.me_website_email_host_user
+      password        = var.me_website_grafana_contact_point_email_password
+      from_address    = var.me_website_email_host_user
+      from_name       = "Grafana Alerts - iplayishow"
+      startTLS_policy = "MandatoryStartTLS"
     }
   })
 
