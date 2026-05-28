@@ -218,3 +218,19 @@ resource "aws_iam_role_policy" "grafana_operator_token_rotation_policy" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "grafana_sns_publish" {
+  name = "me-website-grafana-sns-publish"
+  role = module.me_website_managed_grafana.workspace_iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.grafana_alerts.arn
+      }
+    ]
+  })
+}

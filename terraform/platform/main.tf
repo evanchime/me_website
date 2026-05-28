@@ -620,15 +620,6 @@ module "me_website_managed_grafana" {
     },
     plugins = {
       pluginAdminEnabled = true
-    },
-    smtp = {
-      enabled         = true
-      host            = "smtp.gmail.com:587"
-      user            = var.me_website_email_host_user
-      password        = var.me_website_grafana_contact_point_email_password
-      from_address    = var.me_website_email_host_user
-      from_name       = "Grafana Alerts - iplayishow"
-      startTLS_policy = "MandatoryStartTLS"
     }
   })
 
@@ -820,4 +811,15 @@ resource "aws_lambda_permission" "secrets_manager_invoke_permission" {
   function_name = aws_lambda_function.grafana_operator_token_rotation_lambda.function_name
   principal     = "secretsmanager.amazonaws.com"
   source_arn    = aws_secretsmanager_secret.grafana_operator_token.arn
+}
+
+resource "aws_sns_topic" "grafana_alerts" {
+  name   = "me-website-grafana-alerts"
+  region = data.terraform_remote_state.me_website_k8s_eks.outputs.region
+}
+
+resource "aws_sns_topic_subscription" "email_sub" {
+  topic_arn = aws_sns_topic.grafana_alerts.arn
+  protocol  = "email"
+  endpoint  = var.me_website_email_host_user
 }
