@@ -99,3 +99,8 @@ output "adot_collector_service_account" {
   description = "The name of the Kubernetes Service Account used by the ADOT Collector."
   value       = kubernetes_service_account_v1.adot_collector_service_account.metadata[0].name
 }
+
+output "sns_topic_arn" {
+  description = "The ARN of the SNS topic for me_website application notifications."
+  value       = aws_sns_topic.grafana_alerts.arn
+}
