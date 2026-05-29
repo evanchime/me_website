@@ -856,6 +856,7 @@ resource "grafana_data_source" "prometheus" {
 
   json_data_encoded = jsonencode({
     httpMethod    = "POST"
+    manageAlerts  = false
     sigV4Auth     = true
     sigV4AuthType = "ec2_iam_role"
     sigV4Region   = data.terraform_remote_state.me_website_k8s_platform.outputs.region
