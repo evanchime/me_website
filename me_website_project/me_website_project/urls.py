@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import TemplateView
 from django.conf.urls.static import static
-from .views import health_check
+from .views import health_check, trigger_alert_test
 
 
 urlpatterns = [
@@ -35,6 +35,7 @@ urlpatterns = [
     path("contact/", include("contact.urls")),
     path("features/", include("features.urls")),
     path("ht/", health_check, name="health_check"),
+    path('trigger-500/', trigger_alert_test, name='trigger_500'),
 ]
 
 # This is only for development and will only work if DEBUG is True
