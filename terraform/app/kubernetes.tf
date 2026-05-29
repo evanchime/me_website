@@ -1000,3 +1000,118 @@ resource "kubernetes_manifest" "grafana_token_sync" {
     }
   }
 }
+
+resource "grafana_folder" "me_website_grafana_alerts_folder" { 
+  title = "My me-website 500 Error Alert Rule Folder" 
+}
+
+resource "grafana_contact_point" "me_website_sns_email" {
+  name = "me_website SNS to Email Channel"
+
+  sns { 
+    topic = data.terraform_remote_state.me_website_k8s_platform.outputs.sns_topic_arn 
+    auth_provider = "default" 
+    message_format = "text" 
+    disable_resolve_message = false 
+    subject = "Grafana Alert: {{ template \"default.title\" . }}" 
+  } 
+}
+
+resource "grafana_notification_policy" "me_website_alert_routing" {
+  contact_point = grafana_contact_point.me_website_sns_email.name
+
+  group_by        = ["alertname", "cluster"]
+  group_wait      = "30s"
+  group_interval  = "5m"
+  repeat_interval = "4h"
+
+  policy {
+    contact_point = grafana_contact_point.me_website_sns_email.name
+    matcher {
+      label = "severity"
+      match = "="
+      value = "critical"
+    }
+    continue = true
+  }
+}
+
+resource "grafana_rule_group" "me_website_alerts" {
+  name             = "me_website-alerts-group"
+  folder_uid       = grafana_folder.me_website_grafana_alerts_folder.uid
+
+  interval_seconds = 60
+
+  rule {
+    name           = "High me_website 5xx Error Rate"
+    for            = "2m"
+    condition      = "B" # Fires when the classic conditions in Block B evaluate to true
+    no_data_state  = "OK"
+    exec_err_state = "Alerting"
+    is_paused      = false
+
+    data {
+      ref_id = "A"
+      relative_time_range {
+        from = 300
+        to   = 0
+      }
+      datasource_uid = grafana_data_source.prometheus.uid
+      model = jsonencode({
+        hide          = false
+        expr          = "sum(rate(http_server_request_duration_count{http_status_code=~\"5..\"}[2m]))"
+        intervalMs    = 1000
+        maxDataPoints = 43200
+        refId         = "A"
+      })
+    }
+
+    data {
+      ref_id = "B"
+      relative_time_range {
+        from = 0
+        to   = 0
+      }
+      datasource_uid = "-100"
+      model = jsonencode({
+        type = "classic_conditions"
+        refId = "B"
+        hide  = false
+        intervalMs    = 1000
+        maxDataPoints = 43200
+        datasource = {
+          type = "__expr__"
+          uid  = "-100"
+        }
+        conditions = [
+          {
+            type = "query"
+            evaluator = { 
+              type   = "gt"
+              params = [5] # Fails if error threshold count > 5
+            }
+            operator = { 
+              type = "and" 
+            }
+            query = { 
+              params = ["A"] # Evaluates the PromQL output generated inside Block A
+            }
+            reducer = { 
+              type   = "last"
+              params = [] 
+            }
+          }
+        ]
+      })
+    }
+
+    annotations = {
+      summary     = "High frequency of HTTP 5xx errors detected on iplayishow.com"
+      description = "The me_website application container is producing more than 5 internal server errors per minute. Check your CloudWatch logs immediately."
+    }
+
+    labels = {
+      severity = "critical"
+    }
+  }
+}
