@@ -1053,6 +1053,7 @@ resource "grafana_rule_group" "me_website_alerts" {
 
     data {
       ref_id = "A"
+      query_type = ""
       relative_time_range {
         from = 300
         to   = 0
@@ -1069,6 +1070,7 @@ resource "grafana_rule_group" "me_website_alerts" {
 
     data {
       ref_id = "B"
+      query_type = ""
       relative_time_range {
         from = 0
         to   = 0
