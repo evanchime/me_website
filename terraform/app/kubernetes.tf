@@ -1014,7 +1014,7 @@ resource "grafana_contact_point" "me_website_sns_email" {
     auth_provider = "default" 
     message_format = "text" 
     disable_resolve_message = false 
-    subject = "Grafana Alert: {{ template \"default.title\" . }}"
+    subject = "CRITICAL: Me-Website 5xx Errors firing"
     settings = {
       region = data.terraform_remote_state.me_website_k8s_platform.outputs.region
     }
