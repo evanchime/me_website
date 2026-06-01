@@ -1061,7 +1061,7 @@ resource "grafana_rule_group" "me_website_alerts" {
       datasource_uid = grafana_data_source.prometheus.uid
       model = jsonencode({
         hide          = false
-        expr          = "sum(rate(http_server_request_duration_count{http_status_code>=500, http_status_code<600}[2m]))"
+        expr        = "sum(rate(http_server_duration_milliseconds_count{http_status_code=~\"5..\"}[2m]))"
         intervalMs    = 1000
         maxDataPoints = 43200
         refId         = "A"
