@@ -1021,7 +1021,7 @@ resource "grafana_contact_point" "me_website_sns_email" {
 resource "grafana_notification_policy" "me_website_alert_routing" {
   contact_point = grafana_contact_point.me_website_sns_email.name
 
-  group_by        = ["alertname", "cluster"]
+  group_by        = ["alertname"]
   group_wait      = "30s"
   group_interval  = "5m"
   repeat_interval = "4h"
