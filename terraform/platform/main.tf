@@ -417,7 +417,7 @@ resource "aws_db_instance" "me_website_k8s_db" {
   allocated_storage           = 20
   apply_immediately           = true
   engine                      = "postgres"
-  engine_version              = "17.4"
+  engine_version              = "17.9"
   username                    = "me_website_k8s_admin"
   password                    = random_password.db_password.result
   allow_major_version_upgrade = true
