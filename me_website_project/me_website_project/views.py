@@ -134,9 +134,3 @@ def health_check(request):
             },
             status=503
         )
-
-
-def trigger_alert_test(request):
-    # This guarantees a native HTTP 500 Internal Server Error response
-    raise Exception("Testing Grafana OpenTelemetry Alerting Chain")
-
