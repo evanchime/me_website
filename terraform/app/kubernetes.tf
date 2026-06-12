@@ -546,14 +546,27 @@ exporters:
     endpoint: "${data.terraform_remote_state.me_website_k8s_platform.outputs.me_website_prometheus_workspace_endpoint}api/v1/remote_write"
     auth:
       authenticator: sigv4auth
+    timeout: 5s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 1m
   awsxray:
     region: "${data.terraform_remote_state.me_website_k8s_platform.outputs.region}"
+
+processors:
+  batch:
+    send_batch_size: 8192
+    timeout: 1s
+    send_batch_max_size: 10240
 
 service:
   extensions: [sigv4auth]
   pipelines:
     metrics:
       receivers: [otlp]
+      processors: [batch]
       exporters: [prometheusremotewrite]
     traces:
       receivers: [otlp]
@@ -1041,32 +1054,34 @@ resource "grafana_notification_policy" "me_website_alert_routing" {
 }
 
 resource "grafana_rule_group" "me_website_alerts" {
-  name             = "me_website-alerts-group"
+  name             = "me-website-alerts-group"
   folder_uid       = grafana_folder.me_website_grafana_alerts_folder.uid
-
   interval_seconds = 60
 
   rule {
-    name           = "High me_website 5xx Error Rate"
+    name           = "High Django 5xx Error Rate"
     for            = "2m"
-    condition      = "B" # Fires when the classic conditions in Block B evaluate to true
+    condition      = "C"
     no_data_state  = "OK"
-    exec_err_state = "Alerting"
+    exec_err_state = "Error"
     is_paused      = false
 
     data {
       ref_id = "A"
       query_type = ""
       relative_time_range {
-        from = 300
+        from = 600
         to   = 0
       }
       datasource_uid = grafana_data_source.prometheus.uid
       model = jsonencode({
-        hide          = false
-        expr        = "sum(rate(http_server_duration_milliseconds_count{http_status_code=~\"5..\"}[2m]))"
+        editorMode    = "code"
+        expr = "sum(rate(http_server_duration_milliseconds_count{http_status_code=~\"5..\"}[2m])) or sum(absent(http_server_duration_milliseconds_count{http_status_code=~\"5..\"})) * 0"
+        instant       = true
         intervalMs    = 1000
+        legendFormat  = "__auto"
         maxDataPoints = 43200
+        range         = false
         refId         = "A"
       })
     }
@@ -1075,36 +1090,60 @@ resource "grafana_rule_group" "me_website_alerts" {
       ref_id = "B"
       query_type = ""
       relative_time_range {
-        from = 0
+        from = 600
         to   = 0
       }
-      datasource_uid = "-100"
+      datasource_uid = "__expr__"
       model = jsonencode({
-        type = "classic_conditions"
-        refId = "B"
-        hide  = false
+        type          = "reduce"
+        refId         = "B"
+        expression    = "A"
+        reducer       = "last"
         intervalMs    = 1000
         maxDataPoints = 43200
         datasource = {
           type = "__expr__"
-          uid  = "-100"
+          uid  = "__expr__"
         }
         conditions = [
           {
-            type = "query"
+            type     = "query"
+            operator = { type = "and" }
+            query    = { params = ["B"] }
+            reducer  = { type = "last", params = [] }
+            evaluator = { type = "gt", params = [] }
+          }
+        ]
+      })
+    }
+
+    data {
+      ref_id = "C"
+      query_type = ""
+      relative_time_range {
+        from = 600
+        to   = 0
+      }
+      datasource_uid = "__expr__"
+      model = jsonencode({
+        type          = "threshold"
+        refId         = "C"
+        expression    = "B"
+        intervalMs    = 1000
+        maxDataPoints = 43200
+        datasource = {
+          type = "__expr__"
+          uid  = "__expr__"
+        }
+        conditions = [
+          {
+            type     = "query"
+            operator = { type = "and" }
+            query    = { params = ["C"] }
+            reducer  = { type = "last", params = [] }
             evaluator = { 
               type   = "gt"
-              params = [5] # Fails if error threshold count > 5
-            }
-            operator = { 
-              type = "and" 
-            }
-            query = { 
-              params = ["A"] # Evaluates the PromQL output generated inside Block A
-            }
-            reducer = { 
-              type   = "last"
-              params = [] 
+              params = [0.5]
             }
           }
         ]
@@ -1113,7 +1152,7 @@ resource "grafana_rule_group" "me_website_alerts" {
 
     annotations = {
       summary     = "High frequency of HTTP 5xx errors detected on iplayishow.com"
-      description = "The me_website application container is producing more than 5 internal server errors per minute. Check your CloudWatch logs immediately."
+      description = "The me_website application container is producing more than 5 internal server errors per minute. Check CloudWatch logs."
     }
 
     labels = {
