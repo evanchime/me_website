@@ -45,6 +45,17 @@ module "eks" {
         }
       }
     }
+
+    GitHub_Actions_IaC_Pipeline = {
+      principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/GitHubActions-Terraform-Role"
+
+      policy_associations = {
+        cluster = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
   }
 
   vpc_id     = data.terraform_remote_state.me_website_k8s_network.outputs.vpc_id
