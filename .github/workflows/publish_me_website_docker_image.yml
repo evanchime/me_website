@@ -4,13 +4,22 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Choose action type'
+        required: true
+        default: 'apply'
+        type: choice
+        options: [ apply, destroy ]
+      target_workspace:
+        description: 'Specific workspace to target (Leave as "all" for normal runs)'
+        required: true
+        default: 'all'
+        type: choice
+        options: [ all, network, eks, platform, app ]
   push:
     branches:
-      - main
-      - develop
-  pull_request:
-    branches:
-      - main
+      - feature-k8s-migration-monitoring-observability
 
 permissions:
   contents: read
@@ -19,6 +28,36 @@ permissions:
   id-token: write      # Required for OIDC authentication with AWS
 
 jobs:
+  change-detection:
+    name: Detect Modified Workspace Paths
+    runs-on: ubuntu-latest
+    outputs:
+      network: ${{ steps.filter.outputs.network }}
+      eks: ${{ steps.filter.outputs.eks }}
+      platform: ${{ steps.filter.outputs.platform }}
+      app: ${{ steps.filter.outputs.app }}
+      me_website: ${{ steps.filter.outputs.me_website }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Interrogate Commit File Changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            network:
+              - 'terraform/network/**'
+            eks:
+              - 'terraform/eks/**'
+            platform:
+              - 'terraform/platform/**'
+            app:
+              - 'terraform/app/**'
+              - 'me_website_project/**'
+            me_website:
+              - 'me_website_project/**'
+
   test:
     name: Run Test Suite
     strategy:
@@ -31,11 +70,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: needs.change-detection.outputs.me_website == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip dependencies
+        if: needs.change-detection.outputs.me_website == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -44,25 +85,43 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
+        if: needs.change-detection.outputs.me_website == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r me_website_project/requirements.txt
           pip install pytest pytest-django pytest-cov
 
       - name: Run tests with pytest
+        if: needs.change-detection.outputs.me_website == 'true'
         working-directory: ./me_website_project
         run: |
           pytest --tb=short --cov=. --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
+        if: needs.change-detection.outputs.me_website == 'true'
         uses: codecov/codecov-action@v5
         with:
           file: ./me_website_project/coverage.xml
           flags: unittests
           name: codecov-umbrella
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.6
+
+      - name: Validate IaC Configurations
+        run: |
+          for dir in network eks platform app; do
+            if [ -d "terraform/$dir" ]; then
+              echo "Checking terraform/$dir..."
+              cd "terraform/$dir" && terraform init -backend=false && terraform validate && cd ../..
+            fi
+          done
 
   build-and-test-docker:
     name: Build and Test Docker Image
+    if: needs.change-detection.outputs.me_website == 'true'
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -105,100 +164,215 @@ jobs:
             --entrypoint "" \
             "$IMAGE_TAG" \
             pytest
-
-  push-to-registries:
-    name: Push to ECR and Docker Hub with Attestation
+ 
+  push-to-registry:
+    name: Scan, Verify, and Push to ECR
     needs: build-and-test-docker
-    if: github.event_name != 'pull_request'
+    if: needs.change-detection.outputs.me_website == 'true'
     runs-on: ubuntu-latest
 
     steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Set up Docker Buildx
-          uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        - name: Extract metadata for Docker
-          id: meta
-          uses: docker/metadata-action@v5
-          with:
-            images: |
-              ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}
-              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_NAME }}
-            tags: |
-              type=semver,pattern=v{{version}}
-              type=semver,pattern=v{{major}}.{{minor}}
-              type=sha,format=short
-              type=raw,value=latest,enable={{is_default_branch}}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
+          aws-region: ${{ secrets.AWS_REGION }}
 
-        - name: Configure AWS credentials
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
-            role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
-            aws-region: ${{ secrets.AWS_REGION }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-        - name: Login to Amazon ECR
-          uses: aws-actions/amazon-ecr-login@v2
+      - name: Compile Unified Production Binary
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+          
+          # Build once and store locally as 'me-website-scan:latest'
+          docker buildx build \
+            --context ./me_website_project \
+            --target production \
+            --tag me-website-scan:latest \
+            --load \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max .
 
-        - name: Login to Docker Hub
-          uses: docker/login-action@v3
-          with:
-            username: ${{ secrets.DOCKERHUB_USERNAME }}
-            password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Scan local image with Amazon Inspector
+        uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
+        id: inspector-scan 
+        with:
+          artifact_type: 'container'
+          artifact_path: 'me-website-scan:latest'
+          critical_threshold: 1
+          high_threshold: 1
+          medium_threshold: 999
+          low_threshold: 999
+          other_threshold: 999
 
-        - name: Build image for scanning
-          uses: docker/build-push-action@v6
-          with:
-            context: ./me_website_project
-            target: production
-            load: true
-            push: false
-            tags: me-website-scan:latest # A temporary, predictable tag
-            cache-from: type=gha
-            cache-to: type=gha,mode=max
+      - name: Check vulnerability thresholds
+        if: always()
+        run: |
+          echo "Scan complete. Checking thresholds..."
+          VULNERABILITY_THRESHOLD_EXCEEDED=${{ steps.inspector-scan.outputs.vulnerability_threshold_exceeded }}
+          if [[ "$VULNERABILITY_THRESHOLD_EXCEEDED" == "1" ]]; then
+              echo "::error::Vulnerability threshold exceeded. Failing the build."
+              exit 1
+          fi
 
-        - name: Scan local image with Amazon Inspector
-          uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
-          id: inspector-scan 
-          with:
-            artifact_type: 'container'
-            artifact_path: 'me-website-scan:latest'
-            critical_threshold: 1
-            high_threshold: 1
-            # Set the others to a high number as I don't care about them
-            medium_threshold: 999
-            low_threshold: 999
-            other_threshold: 999
+      - name: Upload vulnerability scan results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: inspector-scan-results
+          path: |
+              *.csv
+              *.md
 
-        - name: Check vulnerability thresholds
-          if: always()
-          run: |
-            echo "Scan complete. Checking thresholds..."
-            VULNERABILITY_THRESHOLD_EXCEEDED=${{ steps.inspector-scan.outputs.vulnerability_threshold_exceeded }}
-            echo "Vulnerability threshold exceeded: $VULNERABILITY_THRESHOLD_EXCEEDED"
-            if [[ "$VULNERABILITY_THRESHOLD_EXCEEDED" == "1" ]]; then
-                echo "::error::Vulnerability threshold exceeded. Failing the build."
-                exit 1
+      - name: Distribute Verified Image to All Registries
+        run: |
+          # Pull the short SHA from the GitHub Env context map into a local bash variable
+          SHORT_SHA="${{ env.SHORT_SHA }}"
+
+          # Define absolute registry paths
+          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+          ECR_REPO="me_website"
+          
+          echo "Retagging scanned binary to short SHA: $SHORT_SHA"
+          
+          # Map local scanned image to ECR Destination Tags
+          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
+          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:latest"
+          
+          # Push all prepared tags over the network instantly
+          docker push "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
+          docker push "$ECR_REGISTRY/$ECR_REPO:latest"
+  
+  iac-execution:
+    name: Execute Targeted State Changes
+    needs: [change-detection, push-to-registry]
+    if: |
+      always() &&
+      ((github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability') || 
+      github.event_name == 'workflow_dispatch') &&
+      (needs.push-to-registry.result == 'success' || needs.push-to-registry.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.6
+
+      - name: Inject Short Git SHA into Terraform Variables
+        run: |
+          # Extract the 7-character short commit hash
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "Generated Short SHA: $SHORT_SHA"
+          
+          # Write the variable directly into the app workspace directory folder
+          echo "me_website_image_tag = \"$SHORT_SHA\"" > terraform/app/image.auto.tfvars
+          
+          # Visual confirmation verification printout
+          cat terraform/app/image.auto.tfvars
+
+      - name: Process Dynamic Change Dependency Pipeline
+        run: |
+          ACTION_TYPE="${{ inputs.action || 'apply' }}"
+          TARGET_WS="${{ inputs.target_workspace || 'all' }}"
+
+          echo "▶️ Action = $ACTION_TYPE | Target Workspace = $TARGET_WS"
+
+          # Initialize our structural execution flags to false by default
+          RUN_NET=false 
+          RUN_EKS=false
+          RUN_PLAT=false
+          RUN_APP=false
+
+          if [ "$ACTION_TYPE" == "destroy" ]; then
+            TF_COMMAND="destroy -auto-approve"
+  
+            if [ "$TARGET_WS" == "all" ]; then
+              echo "⚠️ Full teardown initiated! Reversing sequence order."
+              WORKSPACE_ORDER="app platform eks network"
+              RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
+
+            elif [ "$TARGET_WS" == "network" ]; then
+                echo "⚠️ Target Destroy: Network. Must tear down downstream Eks, Platform and App layer first."
+                WORKSPACE_ORDER="app platform eks network"
+                RUN_APP=true; RUN_PLAT=true; RUN_EKS=true;RUN_NET=true
+
+            elif [ "$TARGET_WS" == "eks" ]; then
+                echo "⚠️ Target Destroy: Eks. Must tear down downstream Platform and App layer first."
+                WORKSPACE_ORDER="app platform eks"
+                RUN_APP=true; RUN_PLAT=true; RUN_EKS=true
+      
+            elif [ "$TARGET_WS" == "platform" ]; then
+              echo "⚠️ Target Destroy: Platform. Must tear down downstream App layer first."
+              WORKSPACE_ORDER="app platform"
+              RUN_APP=true; RUN_PLAT=true
+              
+            elif [ "$TARGET_WS" == "app" ]; then
+              echo "⚠️ Target Destroy: App only."
+              WORKSPACE_ORDER="app"
+              RUN_APP=true
+              
             else
-                echo "Vulnerability thresholds not exceeded. Proceeding."
+              echo "🛑 Error: Destroying '$TARGET_WS' directly is blocked. You must destroy 'all', 'network', 'platform', or 'app'."
+              exit 1
             fi
 
-        - name: Upload vulnerability scan results
-          if: always()
-          uses: actions/upload-artifact@v5
-          with:
-            name: inspector-scan-results
-            path: |
-                *.csv
-                *.md
+          else
+            TF_COMMAND="apply -auto-approve"
+            WORKSPACE_ORDER="network eks platform app"
+  
+            # Fetch the path-based change flags from your git commit analysis
+            CHG_NET="${{ needs.change-detection.outputs.network }}"
+            CHG_EKS="${{ needs.change-detection.outputs.eks }}"
+            CHG_PLAT="${{ needs.change-detection.outputs.platform }}"
+            CHG_APP="${{ needs.change-detection.outputs.app }}"
 
-        - name: Push image to registries
-          uses: docker/build-push-action@v6
-          with:
-            context: ./me_website_project
-            target: production
-            push: true
-            tags: ${{ steps.meta.outputs.tags }} 
-            labels: ${{ steps.meta.outputs.labels }}
-            cache-from: type=gha # Use the cache from the scan-build step
+            if [ "$TARGET_WS" == "all" ]; then
+              echo "🔄 Standard CI/CD Run: Evaluating which directories contain modified files."
+              if [ "$CHG_NET" == "true" ]; then RUN_NET=true; fi
+              if [ "$CHG_EKS" == "true" ]  || [ "$RUN_NET" == "true" ]; then RUN_EKS=true; fi
+              if [ "$CHG_PLAT" == "true" ] || [ "$RUN_EKS" == "true" ]; then RUN_PLAT=true; fi
+              if [ "$CHG_APP" == "true" ]  || [ "$RUN_PLAT" == "true" ]; then RUN_APP=true; fi
+              
+            else
+              echo "🎯 Targeted Manual Override Apply: Executing starting from layer '$TARGET_WS'."
+              # Manual target overrides bypass git checks and force deployment from that layer forward
+              if [ "$TARGET_WS" == "network" ];  then RUN_NET=true; RUN_EKS=true; RUN_PLAT=true; RUN_APP=true; fi
+              if [ "$TARGET_WS" == "eks" ];      then RUN_EKS=true; RUN_PLAT=true; RUN_APP=true; fi
+              if [ "$TARGET_WS" == "platform" ]; then RUN_PLAT=true; RUN_APP=true; fi
+              if [ "$TARGET_WS" == "app" ];      then RUN_APP=true; fi
+            fi
+          fi
+
+          for dir in $WORKSPACE_ORDER; do
+            SHOULD_RUN=false
+            if [ "$dir" == "network" ]  && [ "$RUN_NET" == "true" ];  then SHOULD_RUN=true; fi
+            if [ "$dir" == "eks" ]      && [ "$RUN_EKS" == "true" ];  then SHOULD_RUN=true; fi
+            if [ "$dir" == "platform" ] && [ "$RUN_PLAT" == "true" ]; then SHOULD_RUN=true; fi
+            if [ "$dir" == "app" ]      && [ "$RUN_APP" == "true" ];  then SHOULD_RUN=true; fi
+
+            if [ "$SHOULD_RUN" == "true" ]; then
+              echo "🚀 EXECUTION: Entering directory terraform/$dir to execute 'terraform $TF_COMMAND'"
+              cd terraform/$dir && terraform init && terraform $TF_COMMAND && cd ../..
+            else
+              echo "⏭️ BYPASS: Skipping folder terraform/$dir (Not in the target evaluation path)"
+            fi
+          done
