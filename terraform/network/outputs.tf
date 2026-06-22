@@ -44,6 +44,11 @@ output "s3_static_assets_bucket" {
   value       = aws_s3_bucket.buckets["static"].bucket
 }
 
+output "s3_error_pages_bucket" {
+  description = "The S3 bucket name for error pages"
+  value       = aws_s3_bucket.buckets["error_pages"].bucket
+}
+
 output "vpc_id" {
   description = "The VPC ID"
   value       = module.vpc.vpc_id
