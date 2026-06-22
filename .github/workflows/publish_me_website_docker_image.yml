@@ -303,7 +303,7 @@ jobs:
           RUN_APP=false
 
           if [ "$ACTION_TYPE" == "destroy" ]; then
-            TF_COMMAND="destroy -auto-approve"
+            TF_COMMAND="destroy -auto-approve -input=false -lock-timeout=3m"
   
             if [ "$TARGET_WS" == "all" ]; then
               echo "⚠️ Full teardown initiated! Reversing sequence order."
@@ -336,7 +336,7 @@ jobs:
             fi
 
           else
-            TF_COMMAND="apply -auto-approve"
+            TF_COMMAND="apply -auto-approve -input=false -lock-timeout=3m"
             WORKSPACE_ORDER="network eks platform app"
   
             # Fetch the path-based change flags from your git commit analysis
