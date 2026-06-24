@@ -284,95 +284,17 @@ jobs:
           echo "Generated Short SHA: $SHORT_SHA"
           
           # Write the variable directly into the app workspace directory folder
-          echo "me_website_image_tag = \"$SHORT_SHA\"" > terraform/app/image.auto.tfvars
+          echo "me_website_image_tag = \"$SHORT_SHA\"" > "$GITHUB_WORKSPACE/terraform/app/image.auto.tfvars"
           
           # Visual confirmation verification printout
-          cat terraform/app/image.auto.tfvars
+          cat "$GITHUB_WORKSPACE/terraform/app/image.auto.tfvars"
 
       - name: Process Dynamic Change Dependency Pipeline
-        run: |
-          ACTION_TYPE="${{ inputs.action || 'apply' }}"
-          TARGET_WS="${{ inputs.target_workspace || 'all' }}"
-
-          echo "▶️ Action = $ACTION_TYPE | Target Workspace = $TARGET_WS"
-
-          # Initialize our structural execution flags to false by default
-          RUN_NET=false 
-          RUN_EKS=false
-          RUN_PLAT=false
-          RUN_APP=false
-
-          if [ "$ACTION_TYPE" == "destroy" ]; then
-            TF_COMMAND="destroy -auto-approve -input=false -lock-timeout=3m"
-  
-            if [ "$TARGET_WS" == "all" ]; then
-              echo "⚠️ Full teardown initiated! Reversing sequence order."
-              WORKSPACE_ORDER="app platform eks network"
-              RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
-
-            elif [ "$TARGET_WS" == "network" ]; then
-                echo "⚠️ Target Destroy: Network. Must tear down downstream Eks, Platform and App layer first."
-                WORKSPACE_ORDER="app platform eks network"
-                RUN_APP=true; RUN_PLAT=true; RUN_EKS=true;RUN_NET=true
-
-            elif [ "$TARGET_WS" == "eks" ]; then
-                echo "⚠️ Target Destroy: Eks. Must tear down downstream Platform and App layer first."
-                WORKSPACE_ORDER="app platform eks"
-                RUN_APP=true; RUN_PLAT=true; RUN_EKS=true
-      
-            elif [ "$TARGET_WS" == "platform" ]; then
-              echo "⚠️ Target Destroy: Platform. Must tear down downstream App layer first."
-              WORKSPACE_ORDER="app platform"
-              RUN_APP=true; RUN_PLAT=true
-              
-            elif [ "$TARGET_WS" == "app" ]; then
-              echo "⚠️ Target Destroy: App only."
-              WORKSPACE_ORDER="app"
-              RUN_APP=true
-              
-            else
-              echo "🛑 Error: Destroying '$TARGET_WS' directly is blocked. You must destroy 'all', 'network', 'platform', or 'app'."
-              exit 1
-            fi
-
-          else
-            TF_COMMAND="apply -auto-approve -input=false -lock-timeout=3m"
-            WORKSPACE_ORDER="network eks platform app"
-  
-            # Fetch the path-based change flags from your git commit analysis
-            CHG_NET="${{ needs.change-detection.outputs.network }}"
-            CHG_EKS="${{ needs.change-detection.outputs.eks }}"
-            CHG_PLAT="${{ needs.change-detection.outputs.platform }}"
-            CHG_APP="${{ needs.change-detection.outputs.app }}"
-
-            if [ "$TARGET_WS" == "all" ]; then
-              echo "🔄 Standard CI/CD Run: Evaluating which directories contain modified files."
-              if [ "$CHG_NET" == "true" ]; then RUN_NET=true; fi
-              if [ "$CHG_EKS" == "true" ]  || [ "$RUN_NET" == "true" ]; then RUN_EKS=true; fi
-              if [ "$CHG_PLAT" == "true" ] || [ "$RUN_EKS" == "true" ]; then RUN_PLAT=true; fi
-              if [ "$CHG_APP" == "true" ]  || [ "$RUN_PLAT" == "true" ]; then RUN_APP=true; fi
-              
-            else
-              echo "🎯 Targeted Manual Override Apply: Executing starting from layer '$TARGET_WS'."
-              # Manual target overrides bypass git checks and force deployment from that layer forward
-              if [ "$TARGET_WS" == "network" ];  then RUN_NET=true; RUN_EKS=true; RUN_PLAT=true; RUN_APP=true; fi
-              if [ "$TARGET_WS" == "eks" ];      then RUN_EKS=true; RUN_PLAT=true; RUN_APP=true; fi
-              if [ "$TARGET_WS" == "platform" ]; then RUN_PLAT=true; RUN_APP=true; fi
-              if [ "$TARGET_WS" == "app" ];      then RUN_APP=true; fi
-            fi
-          fi
-
-          for dir in $WORKSPACE_ORDER; do
-            SHOULD_RUN=false
-            if [ "$dir" == "network" ]  && [ "$RUN_NET" == "true" ];  then SHOULD_RUN=true; fi
-            if [ "$dir" == "eks" ]      && [ "$RUN_EKS" == "true" ];  then SHOULD_RUN=true; fi
-            if [ "$dir" == "platform" ] && [ "$RUN_PLAT" == "true" ]; then SHOULD_RUN=true; fi
-            if [ "$dir" == "app" ]      && [ "$RUN_APP" == "true" ];  then SHOULD_RUN=true; fi
-
-            if [ "$SHOULD_RUN" == "true" ]; then
-              echo "🚀 EXECUTION: Entering directory terraform/$dir to execute 'terraform $TF_COMMAND'"
-              cd terraform/$dir && terraform init && terraform $TF_COMMAND && cd ../..
-            else
-              echo "⏭️ BYPASS: Skipping folder terraform/$dir (Not in the target evaluation path)"
-            fi
-          done
+        run: ./terraform_deploy.sh
+        env:
+          ACTION_TYPE: "${{ inputs.action || 'apply' }}"
+          TARGET_WS: "${{ inputs.target_workspace || 'all' }}"
+          CHG_NET: "${{ needs.change-detection.outputs.network }}"
+          CHG_EKS: "${{ needs.change-detection.outputs.eks }}"
+          CHG_PLAT: "${{ needs.change-detection.outputs.platform }}"
+          CHG_APP: "${{ needs.change-detection.outputs.app }}"
