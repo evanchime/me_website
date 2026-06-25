@@ -111,6 +111,7 @@ jobs:
           terraform_version: 1.15.6
 
       - name: Validate IaC Configurations
+        shell: bash
         run: |
           for dir in network eks platform app; do
             if [ -d "terraform/$dir" ]; then
