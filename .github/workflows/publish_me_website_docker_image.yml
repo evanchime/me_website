@@ -23,7 +23,7 @@ on:
 
 permissions:
   contents: read
-  packages: write      # Required for pushing to Docker Hub/GHCR
+  packages: write      # Required for pushing to GHCR
   attestations: write  # Required for generating SLSA attestations
   id-token: write      # Required for OIDC authentication with AWS
 
