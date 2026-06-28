@@ -290,6 +290,14 @@ jobs:
           # Visual confirmation verification printout
           cat "$GITHUB_WORKSPACE/terraform/app/image.auto.tfvars"
 
+      - name: Build Grafana Lambda Layer Artifact
+        run: |
+          LAYER_DIR="$GITHUB_WORKSPACE/terraform/platform/layer"
+          mkdir -p "$LAYER_DIR/python"
+          python -m pip install "boto3==1.34.144" -t "$LAYER_DIR/python"
+          cd "$LAYER_DIR"
+          zip -qr python.zip python
+
       - name: Process Dynamic Change Dependency Pipeline
         run: ./terraform_deploy.sh
         env:
