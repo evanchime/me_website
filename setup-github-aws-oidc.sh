@@ -374,7 +374,7 @@ EOF
             "Sid": "STSAssumeRole",
             "Effect": "Allow",
             "Action": ["sts:AssumeRole", "sts:GetCallerIdentity", "sts:GetServiceBearerToken"],
-            "Resource": "*"
+            "Resource": "arn:aws:iam::*:role/*"
         },
         {
             "Sid": "DenyPrivilegeEscalation",
@@ -385,12 +385,19 @@ EOF
                 "iam:DetachRolePolicy",
                 "iam:DeleteRolePolicy",
                 "iam:PutRolePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:DeletePolicy",
+                "iam:DeletePolicyVersion",
                 "iam:DeleteOpenIDConnectProvider",
-                "iam:UpdateOpenIDConnectProviderThumbprint"
+                "iam:UpdateOpenIDConnectProviderThumbprint",
+                "iam:CreateOpenIDConnectProvider"
             ],
             "Resource": [
                 "arn:aws:iam::*:role/GitHubActions-Terraform-Role",
                 "arn:aws:iam::*:role/GitHubActions-ECR-Role",
+                "arn:aws:iam::*:policy/GitHubActions-Terraform-Deploy-Policy",
+                "arn:aws:iam::*:policy/GitHubActions-ECR-PushPull-Policy",
                 "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com"
             ]
         }
