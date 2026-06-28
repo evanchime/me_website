@@ -367,7 +367,7 @@ EOF
         {
             "Sid": "SSOAndIdentityStore",
             "Effect": "Allow",
-            "Action": ["sso-admin:*", "identitystore:*"],
+            "Action": ["sso-admin:*", "sso:*", "identitystore:*"],
             "Resource": "*"
         },
         {
