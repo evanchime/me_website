@@ -299,3 +299,5 @@ jobs:
           CHG_EKS: "${{ needs.change-detection.outputs.eks }}"
           CHG_PLAT: "${{ needs.change-detection.outputs.platform }}"
           CHG_APP: "${{ needs.change-detection.outputs.app }}"
+          # Automatically authenticates Terraform CLI with app.terraform.io
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }} 
