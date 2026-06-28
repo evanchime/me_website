@@ -249,6 +249,9 @@ EOF
     # Covers the full infrastructure stack managed by the Terraform workspaces:
     # network (VPC, CloudFront, Route53, S3), eks (EKS cluster), platform (IAM/IRSA,
     # Grafana, Prometheus), and app (Kubernetes resources, Secrets Manager, Lambda, RDS).
+    # Broad service permissions are required because Terraform creates resources whose
+    # ARNs are not known at policy-authoring time. A final Deny statement guards against
+    # privilege escalation by preventing modification of the OIDC roles and provider.
     cat > terraform-permissions-policy.json << EOF
 {
     "Version": "2012-10-17",
@@ -372,6 +375,24 @@ EOF
             "Effect": "Allow",
             "Action": ["sts:AssumeRole", "sts:GetCallerIdentity", "sts:GetServiceBearerToken"],
             "Resource": "*"
+        },
+        {
+            "Sid": "DenyPrivilegeEscalation",
+            "Effect": "Deny",
+            "Action": [
+                "iam:UpdateAssumeRolePolicy",
+                "iam:DeleteRole",
+                "iam:DetachRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteOpenIDConnectProvider",
+                "iam:UpdateOpenIDConnectProviderThumbprint"
+            ],
+            "Resource": [
+                "arn:aws:iam::*:role/GitHubActions-Terraform-Role",
+                "arn:aws:iam::*:role/GitHubActions-ECR-Role",
+                "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com"
+            ]
         }
     ]
 }
