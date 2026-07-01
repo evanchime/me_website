@@ -70,13 +70,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: needs.change-detection.outputs.me_website == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip dependencies
-        if: needs.change-detection.outputs.me_website == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -85,20 +83,17 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        if: needs.change-detection.outputs.me_website == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r me_website_project/requirements.txt
           pip install pytest pytest-django pytest-cov
 
       - name: Run tests with pytest
-        if: needs.change-detection.outputs.me_website == 'true'
         working-directory: ./me_website_project
         run: |
           pytest --tb=short --cov=. --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
-        if: needs.change-detection.outputs.me_website == 'true'
         uses: codecov/codecov-action@v5
         with:
           file: ./me_website_project/coverage.xml
@@ -122,7 +117,6 @@ jobs:
 
   build-and-test-docker:
     name: Build and Test Docker Image
-    if: needs.change-detection.outputs.me_website == 'true'
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -169,7 +163,6 @@ jobs:
   push-to-registry:
     name: Scan, Verify, and Push to ECR
     needs: build-and-test-docker
-    if: needs.change-detection.outputs.me_website == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -195,12 +188,12 @@ jobs:
           
           # Build once and store locally as 'me-website-scan:latest'
           docker buildx build \
-            --context ./me_website_project \
             --target production \
             --tag me-website-scan:latest \
             --load \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max .
+            --cache-to type=gha,mode=max \
+            ./me_website_project
 
       - name: Scan local image with Amazon Inspector
         uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
@@ -246,20 +239,22 @@ jobs:
           
           # Map local scanned image to ECR Destination Tags
           docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
-          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:latest"
+          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:monitoring"
           
           # Push all prepared tags over the network instantly
           docker push "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
-          docker push "$ECR_REGISTRY/$ECR_REPO:latest"
+          docker push "$ECR_REGISTRY/$ECR_REPO:monitoring"
   
   iac-execution:
     name: Execute Targeted State Changes
     needs: [change-detection, push-to-registry]
     if: |
-      always() &&
-      ((github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability') || 
-      github.event_name == 'workflow_dispatch') &&
-      (needs.push-to-registry.result == 'success' || needs.push-to-registry.result == 'skipped')
+      (needs.push-to-registry.result == 'success') &&
+      (
+        (github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability') || 
+        github.event_name == 'workflow_dispatch'
+      )
+ 
     runs-on: ubuntu-latest
     environment: production
     
