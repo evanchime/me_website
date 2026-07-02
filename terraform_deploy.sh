@@ -5,6 +5,53 @@ set -euo pipefail
 
 echo "▶️ Action = ${ACTION_TYPE} | Target Workspace = ${TARGET_WS}"
 
+# Function to execute Terraform commands with retry logic
+execute_terraform_with_retry() {
+  local dir="$1"
+  local TF_COMMAND="$2"
+
+  local MAX_ATTEMPTS=3
+  local ATTEMPT=1
+  local SUCCESS=false
+  local SLEEP_SECONDS=15
+  local EXIT_CODE=0
+
+  echo "🚀 EXECUTION: Entering directory $GITHUB_WORKSPACE/terraform/$dir"
+  cd "$GITHUB_WORKSPACE/terraform/$dir" && terraform init
+
+  while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
+    echo "▶️ Running 'terraform $TF_COMMAND' (Attempt $ATTEMPT of $MAX_ATTEMPTS)..."
+
+    set +e 
+    terraform $TF_COMMAND
+    EXIT_CODE=$?
+    set -e 
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "✅ Successfully executed configuration changes inside /$dir!"
+        SUCCESS=true
+        break 
+    else
+        echo "⚠️ Error: 'terraform $TF_COMMAND' failed with code $EXIT_CODE."
+
+        if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+            echo "⏳ Potential transient network lag detected. Backing off and pausing for $SLEEP_SECONDS seconds..."
+            sleep "$SLEEP_SECONDS"
+            SLEEP_SECONDS=$((SLEEP_SECONDS * 2))
+            ATTEMPT=$((ATTEMPT + 1))
+        else
+            echo "🛑 Critical: Maximum attempts reached. The failure is persistent."
+            break
+        fi
+    fi
+  done
+
+  if [ "$SUCCESS" != "true" ]; then
+    echo "::error::Terraform execution permanently failed in $dir after $MAX_ATTEMPTS attempts."
+    exit 1
+  fi
+}
+
 # Initialize the execution flags to false by default
 RUN_NET=false 
 RUN_EKS=false
@@ -69,46 +116,20 @@ for dir in $WORKSPACE_ORDER; do
 
 
   if [ "$SHOULD_RUN" == "true" ]; then
-    echo "🚀 EXECUTION: Entering directory $GITHUB_WORKSPACE/terraform/$dir"
-    cd "$GITHUB_WORKSPACE/terraform/$dir" && terraform init
-    
-    MAX_ATTEMPTS=3
-    ATTEMPT=1
-    SUCCESS=false
-    SLEEP_SECONDS=15 
-
-    while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-      echo "▶️ Running 'terraform $TF_COMMAND' (Attempt $ATTEMPT of $MAX_ATTEMPTS)..."
+    # 1. SPECIAL CASE: Recreate Grafana token if skipping standard platform apply but running app
+    if [[ "${RUN_PLAT}" == "false" && "${RUN_APP}" == "true" ]]; then
+      echo "🔄 Special Trigger: App is running but Platform was bypassed. Force-refreshing Grafana Provider Token..."
       
-      set +e 
-      terraform $TF_COMMAND
-      EXIT_CODE=$?
-      set -e 
+      execute_terraform_with_retry "platform" "apply -auto-approve -input=false -lock-timeout=3m -replace='aws_grafana_workspace_service_account_token.grafana_provider_token'"
       
-      if [ $EXIT_CODE -eq 0 ]; then
-        echo "✅ Successfully applied configuration state changes inside /$dir!"
-        SUCCESS=true
-        break 
-      else
-        echo "⚠️ Error: 'terraform $TF_COMMAND' failed with code $EXIT_CODE."
-        
-        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-          echo "⏳ Potential transient network lag detected. Backing off and pausing for $SLEEP_SECONDS seconds..."
-          sleep $SLEEP_SECONDS
-          SLEEP_SECONDS=$((SLEEP_SECONDS * 2))
-          ATTEMPT=$((ATTEMPT + 1))
-        else
-          echo "🛑 Critical: Maximum attempts reached. The failure is persistent."
-          break
-        fi
-      fi
-    done
+      echo "✅ Grafana token refresh sequence complete. Proceeding to standard App deployment."
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
 
-    if [ "$SUCCESS" != "true" ]; then
-      echo "::error::Terraform execution permanently failed in $dir after $MAX_ATTEMPTS attempts."
-      exit 1
+    # 2. STANDARD CASE: Run the folder normally
+    else
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
     fi
-    
+
     if [[ "$dir" == "network" && "${ACTION_TYPE}" != "destroy" ]]; then
       echo "🔄 network apply complete. Syncing CDN HTML Error Pages..."
       CDN_BUCKET_NAME=$(terraform output -raw s3_error_pages_bucket)
