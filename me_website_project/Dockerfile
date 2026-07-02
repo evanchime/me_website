@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY requirements.txt .
-# Install python packages into a user-specific directory
-RUN pip install --user --no-cache-dir -r requirements.txt
+# Upgrade and install python packages into a user-specific directory
+RUN pip install --user --upgrade pip==26.1.2 \
+    && pip install --user --no-cache-dir -r requirements.txt
+
 
 
 # =====================================================================
