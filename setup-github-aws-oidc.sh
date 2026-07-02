@@ -90,6 +90,7 @@ main() {
                     "token.actions.githubusercontent.com:sub": [
                         "repo:evanchime/me_website:ref:refs/heads/main",
                         "repo:evanchime/me_website:ref:refs/heads/develop",
+                        "repo:evanchime/me_website:ref:refs/heads/feature-k8s-migration-monitoring-observability",
                         "repo:evanchime/me_website:ref:refs/tags/*"
                     ]
                 }
