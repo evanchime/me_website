@@ -16,7 +16,7 @@ googleapis-common-protos==1.74.0
 greenlet==3.2.4
 grpcio==1.80.0
 gunicorn==23.0.0
-idna==3.10
+idna==3.18
 imagesize==1.4.1
 importlib_metadata==8.7.1
 iniconfig==2.1.0
@@ -46,10 +46,9 @@ pytest-django==4.11.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-json-logger==4.1.0
-requests==2.32.4
+requests==2.34.2
 roman-numerals-py==3.1.0
 s3transfer==0.13.1
-setuptools==80.9.0
 six==1.17.0
 snowballstemmer==2.2.0
 Sphinx==8.2.3
@@ -60,7 +59,7 @@ sphinxcontrib-jquery==4.1
 sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==2.0.0
 sphinxcontrib-serializinghtml==2.0.0
-sqlparse==0.5.3
+sqlparse==0.5.5
 typing_extensions==4.14.0
 urllib3==2.7.0
 whitenoise==6.9.0
