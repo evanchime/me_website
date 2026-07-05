@@ -36,9 +36,6 @@ COPY . .
 # ...
 FROM python:3.11-slim-bookworm AS production
 
-# Update OS packages to patch known vulnerabilities first
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
-
 # Install runtime dependencies for databases
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libpq5 \
@@ -49,6 +46,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Overwrite the insecure pre-installed base image global packages
+RUN python -m pip install --upgrade pip==26.1.2 setuptools==75.8.0 wheel==0.46.2
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
