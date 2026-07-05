@@ -1,7 +1,7 @@
 # =====================================================================
 # Stage 1: Builder (install dependencies)
 # =====================================================================
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 # Install essential build dependencies
 RUN apt-get update && apt-get install -y \
@@ -34,7 +34,7 @@ COPY . .
 # Stage 3: Production (lean final image)
 # =====================================================================
 # ...
-FROM python:3.11-slim AS production
+FROM python:3.11-slim-bookworm AS production
 
 # Update OS packages to patch known vulnerabilities first
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
