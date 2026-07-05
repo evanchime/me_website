@@ -161,7 +161,7 @@ jobs:
             pytest
  
   push-to-registry:
-    name: Scan, Verify, and Push to ECR # This comment is just to introduce changes to the workflow, not part of the actual code
+    name: Scan, Verify, and Push to ECR
     needs: build-and-test-docker
     runs-on: ubuntu-latest
 
