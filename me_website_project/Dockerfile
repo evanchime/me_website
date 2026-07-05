@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY requirements.txt .
 # Upgrade and install python packages into a user-specific directory
-RUN pip install --user --upgrade pip==26.1.2 setuptools==75.8.0 wheel==0.46.2 \
+RUN pip install --user --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.46.2 \
     && pip install --user --no-cache-dir -r requirements.txt
 
 # =====================================================================
