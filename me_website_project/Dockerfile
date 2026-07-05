@@ -48,7 +48,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf /var/lib/apt/lists/*
 
 # Overwrite the insecure pre-installed base image global packages
-RUN python -m pip install --upgrade pip==26.1.2 setuptools==75.8.0 wheel==0.46.2
+RUN python -m pip install --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.46.2
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
