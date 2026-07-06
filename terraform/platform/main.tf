@@ -504,7 +504,7 @@ module "external_secrets_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   version = "~> 6.2"
 
-  name = "${local.cluster_name}external-secrets"
+  name = "${local.cluster_name}-external-secrets"
 
   policies = {
     policy = aws_iam_policy.external_secrets_policy.arn
@@ -814,8 +814,7 @@ resource "aws_lambda_permission" "secrets_manager_invoke_permission" {
 }
 
 resource "aws_sns_topic" "grafana_alerts" {
-  name   = "me-website-grafana-alerts"
-  region = data.terraform_remote_state.me_website_k8s_eks.outputs.region
+  name = "me-website-grafana-alerts"
 }
 
 resource "aws_sns_topic_subscription" "email_sub" {
