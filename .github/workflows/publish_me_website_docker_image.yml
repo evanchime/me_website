@@ -201,7 +201,6 @@ jobs:
         with:
           artifact_type: 'container'
           artifact_path: 'me-website-scan:latest'
-          remediation_available: true # Only counts bugs that have an active fix
           critical_threshold: 1
           high_threshold: 1
           medium_threshold: 999
