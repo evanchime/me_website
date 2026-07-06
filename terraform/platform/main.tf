@@ -748,26 +748,25 @@ resource "helm_release" "external_secrets" {
   wait = true 
   wait_for_jobs = true
 
-  set {
-    name  = "serviceAccount.name"
-    value = "external-secrets"
-  }
-
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.external_secrets_irsa_role.arn
-  } 
-
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
-  
-  set {
-    # Fargate critical: Avoid port 10250
-    name  = "webhook.port"
-    value = "9443"
-  }
+  set = [
+    {
+      name  = "serviceAccount.name"
+      value = "external-secrets"
+    },
+    {
+      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+      value = module.external_secrets_irsa_role.arn
+    },
+    {
+      name  = "installCRDs"
+      value = "true"
+    },
+    {
+      # Fargate critical: Avoid port 10250
+      name  = "webhook.port"
+      value = "9443"
+    },
+  ]
 }
 
 resource "aws_lambda_function" "grafana_operator_token_rotation_lambda" {
