@@ -18,3 +18,6 @@ staticfiles/
 
 # SSL private key file extension
 *.key
+
+# Terraform files
+*.auto.tfvars
