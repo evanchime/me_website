@@ -146,7 +146,7 @@ resource "kubernetes_cluster_role_binding_v1" "adot_infra" {
 
 module "eks_blueprints_addons" {
   source  = "aws-ia/eks-blueprints-addons/aws"
-  version = "~> 1.23"
+  version = "~> 1.24"
 
   cluster_name      = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_name
   cluster_endpoint  = data.terraform_remote_state.me_website_k8s_eks.outputs.cluster_endpoint
