@@ -60,6 +60,7 @@ jobs:
 
   test:
     name: Run Test Suite
+    if: ${{ github.event.inputs.action != 'destroy' }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -118,6 +119,7 @@ jobs:
   build-and-test-docker:
     name: Build and Test Docker Image
     needs: test
+    if: ${{ github.event.inputs.action != 'destroy' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -163,6 +165,7 @@ jobs:
   push-to-registry:
     name: Scan, Verify, and Push to ECR
     needs: build-and-test-docker
+    if: ${{ github.event.inputs.action != 'destroy' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -247,12 +250,13 @@ jobs:
   
   iac-execution:
     name: Execute Targeted State Changes
-    needs: [change-detection, push-to-registry]
+    needs: [change-detection, test, push-to-registry]
     if: |
-      (needs.push-to-registry.result == 'success') &&
+      always() &&
       (
-        (github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability') || 
-        github.event_name == 'workflow_dispatch'
+        (github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability' && needs.push-to-registry.result == 'success') || 
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy' && (needs.test.result == 'success' || needs.test.result == 'skipped')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && needs.push-to-registry.result == 'success')
       )
  
     runs-on: ubuntu-latest
