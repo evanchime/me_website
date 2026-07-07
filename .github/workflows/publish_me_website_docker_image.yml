@@ -36,7 +36,6 @@ jobs:
       eks: ${{ steps.filter.outputs.eks }}
       platform: ${{ steps.filter.outputs.platform }}
       app: ${{ steps.filter.outputs.app }}
-      me_website: ${{ steps.filter.outputs.me_website }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,8 +53,6 @@ jobs:
               - 'terraform/platform/**'
             app:
               - 'terraform/app/**'
-              - 'me_website_project/**'
-            me_website:
               - 'me_website_project/**'
 
   test:
