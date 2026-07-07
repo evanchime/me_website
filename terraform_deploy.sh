@@ -117,7 +117,7 @@ for dir in $WORKSPACE_ORDER; do
 
   if [ "$SHOULD_RUN" == "true" ]; then
     # 1. SPECIAL CASE: Recreate Grafana token if skipping standard platform apply but running app
-    if [[ "${RUN_PLAT}" == "false" && "${RUN_APP}" == "true" ]]; then
+    if [[ "${ACTION_TYPE}" != "destroy" && "${RUN_PLAT}" == "false" && "${RUN_APP}" == "true" ]]; then
       echo "🔄 Special Trigger: App is running but Platform was bypassed. Force-refreshing Grafana Provider Token..."
       
       execute_terraform_with_retry "platform" "apply -auto-approve -input=false -lock-timeout=3m -replace=aws_grafana_workspace_service_account_token.grafana_provider_token"
@@ -125,7 +125,16 @@ for dir in $WORKSPACE_ORDER; do
       echo "✅ Grafana token refresh sequence complete. Proceeding to standard App deployment."
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
 
-    # 2. STANDARD CASE: Run the folder normally
+    # 2. SPECIAL CASE: Refresh Grafana token before destroying app to avoid expired token 401 errors
+    elif [[ "${ACTION_TYPE}" == "destroy" && "$dir" == "app" ]]; then
+      echo "🔄 Pre-Destroy Token Refresh: Refreshing Grafana Provider Token before app destroy..."
+      
+      execute_terraform_with_retry "platform" "apply -auto-approve -input=false -lock-timeout=3m -replace=aws_grafana_workspace_service_account_token.grafana_provider_token"
+      
+      echo "✅ Grafana token refreshed. Proceeding with app destroy."
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
+
+    # 3. STANDARD CASE: Run the folder normally
     else
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
     fi

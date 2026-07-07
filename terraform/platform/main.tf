@@ -691,7 +691,7 @@ resource "aws_grafana_workspace_service_account_token" "grafana_provider_token" 
   workspace_id       = module.me_website_managed_grafana.workspace_id
   service_account_id = aws_grafana_workspace_service_account.this.service_account_id
   name               = "grafana-provider-token"
-  seconds_to_live    = 7200
+  seconds_to_live    = 2592000
 }
 
 resource "helm_release" "grafana_kubernetes_operator" {
