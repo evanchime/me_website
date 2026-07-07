@@ -56,15 +56,15 @@ def health_check(request):
     Comprehensive health check endpoint.
 
     This view function handles GET requests to the health check endpoint. 
-    It validates the secret header, if not from an ALB health check, then 
-    runs a health check for database. Based on the results, it returns a 
-    JSON response with the overall health status, individual service 
-    statuses, and the application version.
+    It validates the secret header, then runs a health check for 
+    database. Based on the results, it returns a JSON response with the 
+    overall health status, individual service statuses, and the 
+    application version.
     
     The response status code is:
         - 200 (OK): If the check passes.
         - 503 (Service Unavailable): If the check fails.
-        - 403 (Forbidden): If the provided secret is missing or 
+        - 401 (Unauthorized): If the provided secret is missing or 
         incorrect.
 
     Args:
@@ -83,13 +83,13 @@ def health_check(request):
         
         # Validate the secret header
         provided_secret = request.headers.get("X-Health-Check-Secret")
-        # logger.debug(
-        #     f"Health check secret validation - Provided: '{provided_secret}', "
-        #     f"Expected: '{expected_secret}'"
-        # )
+        logger.debug(
+            f"Health check secret validation - Provided: '{provided_secret}', "
+            f"Expected: '{expected_secret}'"
+        )
         
         if not compare_digest(provided_secret or "", expected_secret or ""):
-            return JsonResponse({"error": "Forbidden"}, status=403)
+            return JsonResponse({"error": "Unauthorized"}, status=403)
 
         # Run health check.
         database_status = check_database()
