@@ -125,7 +125,16 @@ for dir in $WORKSPACE_ORDER; do
       echo "✅ Grafana token refresh sequence complete. Proceeding to standard App deployment."
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
 
-    # 2. STANDARD CASE: Run the folder normally
+    # 2. SPECIAL CASE: During destroy, refresh expired Grafana provider token before destroying app
+    elif [[ "${ACTION_TYPE}" == "destroy" && "$dir" == "app" ]]; then
+      echo "🔄 Pre-destroy: App teardown requires a valid Grafana provider token. Force-refreshing..."
+      
+      execute_terraform_with_retry "platform" "apply -auto-approve -input=false -lock-timeout=3m -replace=aws_grafana_workspace_service_account_token.grafana_provider_token"
+      
+      echo "✅ Grafana token refresh complete. Proceeding to app destroy."
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
+
+    # 3. STANDARD CASE: Run the folder normally
     else
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
     fi
