@@ -1,7 +1,7 @@
 # =====================================================================
 # Stage 1: Builder (install dependencies)
 # =====================================================================
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 # Install essential build dependencies
 RUN apt-get update && apt-get install -y \
@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY requirements.txt .
-# Install python packages into a user-specific directory
-RUN pip install --user --no-cache-dir -r requirements.txt
-
+# Upgrade and install python packages into a user-specific directory
+RUN pip install --user --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.46.2 \
+    && pip install --user --no-cache-dir -r requirements.txt
 
 # =====================================================================
 # Stage 2: Test Runner (includes test code and test dependencies)
@@ -30,18 +30,14 @@ ENV PATH="/root/.local/bin:${PATH}"
 # This COPY command will respect the .dockerignore file used during the build.
 COPY . .
 
-
 # =====================================================================
 # Stage 3: Production (lean final image)
 # =====================================================================
 # ...
-FROM python:3.11-slim AS production
-
-# Update OS packages to patch known vulnerabilities first
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+FROM python:3.11-slim-bookworm AS production
 
 # Install runtime dependencies for databases
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libpq5 \
     libmariadb3 \
     postgresql-client \
@@ -51,15 +47,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Overwrite the insecure pre-installed base image global packages
+RUN python -m pip install --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.46.2
+
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.local/bin:${PATH}"
 ENV PYTHONPATH="/app/.local/lib/python3.11/site-packages${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Fallback UID if not provided
+# Fallback UID/GID if not provided
 ARG USER_ID=1000  
-# Fallback GID if not provided
 ARG GROUP_ID=1000
 
 # Create non-root user, app directory and set ownership
