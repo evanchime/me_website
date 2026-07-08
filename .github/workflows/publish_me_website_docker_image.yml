@@ -19,8 +19,6 @@ permissions:
   id-token: write      # Required for OIDC authentication with AWS
 
 jobs:
-<<<<<<< HEAD
-=======
   change-detection:
     name: Detect Modified Workspace Paths
     runs-on: ubuntu-latest
@@ -48,7 +46,6 @@ jobs:
               - 'terraform/app/**'
               - 'me_website_project/**'
 
->>>>>>> origin/feature-k8s-migration-monitoring-observability
   test:
     name: Run Test Suite
     strategy:
