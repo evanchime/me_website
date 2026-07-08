@@ -19,6 +19,36 @@ permissions:
   id-token: write      # Required for OIDC authentication with AWS
 
 jobs:
+<<<<<<< HEAD
+=======
+  change-detection:
+    name: Detect Modified Workspace Paths
+    runs-on: ubuntu-latest
+    outputs:
+      network: ${{ steps.filter.outputs.network }}
+      eks: ${{ steps.filter.outputs.eks }}
+      platform: ${{ steps.filter.outputs.platform }}
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Interrogate Commit File Changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            network:
+              - 'terraform/network/**'
+            eks:
+              - 'terraform/eks/**'
+            platform:
+              - 'terraform/platform/**'
+            app:
+              - 'terraform/app/**'
+              - 'me_website_project/**'
+
+>>>>>>> origin/feature-k8s-migration-monitoring-observability
   test:
     name: Run Test Suite
     strategy:
