@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import environ
-import socket
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,13 +35,6 @@ DEBUG = env.bool('DEBUG', default=False)
 # Fetch ALLOWED_HOSTS environment variable value and parse as a list.
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
-# Dynamically stitch the Fargate pod's own private IP into the trusted list
-try:
-    pod_ip = socket.gethostbyname(socket.gethostname())
-    ALLOWED_HOSTS.append(pod_ip)
-except Exception:
-    pass
-
 # Application definition
 INSTALLED_APPS = [
     'storages',
@@ -65,7 +57,6 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'me_website_project.alb_healthcheck_middleware.ALBHealthCheckMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -185,10 +176,7 @@ else:
 
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = False
-    SECURE_REDIRECT_EXEMPT = [
-        r'^ht/$',
-    ]
+    SECURE_SSL_REDIRECT = True
     CSRF_COOKIE_HTTPONLY = True 
 
     # Configure email
@@ -215,6 +203,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = "home" # Redirect to home page after login
 
 LOGOUT_REDIRECT_URL = "home" # Redirect to home page after logout
+
 
 # Optional but recommended
 APP_VERSION = env.str("APP_VERSION", "1.0.0")
@@ -246,18 +235,9 @@ if ADMIN_EMAIL and ADMIN_EMAIL != 'default@example.com':
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'formatters': {
-        'json': {
-            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
-            # Time format to match Fluent Bit parser
-            'datefmt': '%Y-%m-%dT%H:%M:%S' 
-        },
-    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'json',
         },
         'mail_admins': {
             'level': 'ERROR',
@@ -271,8 +251,8 @@ LOGGING = {
             'propagate': True,
         },
     },
-     'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
 }
+
+
+
+

@@ -4,26 +4,17 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'Choose action type'
-        required: true
-        default: 'apply'
-        type: choice
-        options: [ apply, destroy ]
-      target_workspace:
-        description: 'Specific workspace to target (Leave as "all" for normal runs)'
-        required: true
-        default: 'all'
-        type: choice
-        options: [ all, network, eks, platform, app ]
   push:
     branches:
-      - feature-k8s-migration-monitoring-observability
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
-  packages: write      # Required for pushing to GHCR
+  packages: write      # Required for pushing to Docker Hub/GHCR
   attestations: write  # Required for generating SLSA attestations
   id-token: write      # Required for OIDC authentication with AWS
 
@@ -57,7 +48,6 @@ jobs:
 
   test:
     name: Run Test Suite
-    if: ${{ github.event.inputs.action != 'destroy' }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -97,26 +87,10 @@ jobs:
           file: ./me_website_project/coverage.xml
           flags: unittests
           name: codecov-umbrella
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.15.6
-
-      - name: Validate IaC Configurations
-        shell: bash
-        run: |
-          for dir in network eks platform app; do
-            if [ -d "terraform/$dir" ]; then
-              echo "Checking terraform/$dir..."
-              cd "terraform/$dir" && terraform init -backend=false && terraform validate && cd ../..
-            fi
-          done
 
   build-and-test-docker:
     name: Build and Test Docker Image
     needs: test
-    if: ${{ github.event.inputs.action != 'destroy' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -158,150 +132,100 @@ jobs:
             --entrypoint "" \
             "$IMAGE_TAG" \
             pytest
- 
-  push-to-registry:
-    name: Scan, Verify, and Push to ECR
+
+  push-to-registries:
+    name: Push to ECR and Docker Hub with Attestation
     needs: build-and-test-docker
-    if: ${{ github.event.inputs.action != 'destroy' }}
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        - name: Checkout code
+          uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
-          aws-region: ${{ secrets.AWS_REGION }}
+        - name: Extract metadata for Docker
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: |
+              ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_NAME }}
+            tags: |
+              type=semver,pattern=v{{version}}
+              type=semver,pattern=v{{major}}.{{minor}}
+              type=sha,format=short
+              type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        - name: Configure AWS credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-ECR-Role
+            aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Compile Unified Production Binary
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          
-          # Build once and store locally as 'me-website-scan:latest'
-          docker buildx build \
-            --target production \
-            --tag me-website-scan:latest \
-            --load \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            ./me_website_project
+        - name: Login to Amazon ECR
+          uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Scan local image with Amazon Inspector
-        uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
-        id: inspector-scan 
-        with:
-          artifact_type: 'container'
-          artifact_path: 'me-website-scan:latest'
-          critical_threshold: 1
-          high_threshold: 1
-          medium_threshold: 999
-          low_threshold: 999
-          other_threshold: 999
+        - name: Login to Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Check vulnerability thresholds
-        if: always()
-        run: |
-          echo "Scan complete. Checking thresholds..."
-          VULNERABILITY_THRESHOLD_EXCEEDED=${{ steps.inspector-scan.outputs.vulnerability_threshold_exceeded }}
-          if [[ "$VULNERABILITY_THRESHOLD_EXCEEDED" == "1" ]]; then
-              echo "::error::Vulnerability threshold exceeded. Failing the build."
-              exit 1
-          fi
+        - name: Build image for scanning
+          uses: docker/build-push-action@v6
+          with:
+            context: ./me_website_project
+            target: production
+            load: true
+            push: false
+            tags: me-website-scan:latest # A temporary, predictable tag
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
 
-      - name: Upload vulnerability scan results
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: inspector-scan-results
-          path: |
-              *.csv
-              *.md
+        - name: Scan local image with Amazon Inspector
+          uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
+          id: inspector-scan 
+          with:
+            artifact_type: 'container'
+            artifact_path: 'me-website-scan:latest'
+            critical_threshold: 1
+            high_threshold: 1
+            # Set the others to a high number as I don't care about them
+            medium_threshold: 999
+            low_threshold: 999
+            other_threshold: 999
 
-      - name: Distribute Verified Image to All Registries
-        run: |
-          # Pull the short SHA from the GitHub Env context map into a local bash variable
-          SHORT_SHA="${{ env.SHORT_SHA }}"
+        - name: Check vulnerability thresholds
+          if: always()
+          run: |
+            echo "Scan complete. Checking thresholds..."
+            VULNERABILITY_THRESHOLD_EXCEEDED=${{ steps.inspector-scan.outputs.vulnerability_threshold_exceeded }}
+            echo "Vulnerability threshold exceeded: $VULNERABILITY_THRESHOLD_EXCEEDED"
+            if [[ "$VULNERABILITY_THRESHOLD_EXCEEDED" == "1" ]]; then
+                echo "::error::Vulnerability threshold exceeded. Failing the build."
+                exit 1
+            else
+                echo "Vulnerability thresholds not exceeded. Proceeding."
+            fi
 
-          # Define absolute registry paths
-          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
-          ECR_REPO="me_website"
-          
-          echo "Retagging scanned binary to short SHA: $SHORT_SHA"
-          
-          # Map local scanned image to ECR Destination Tags
-          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
-          docker tag me-website-scan:latest "$ECR_REGISTRY/$ECR_REPO:monitoring"
-          
-          # Push all prepared tags over the network instantly
-          docker push "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
-          docker push "$ECR_REGISTRY/$ECR_REPO:monitoring"
-  
-  iac-execution:
-    name: Execute Targeted State Changes
-    needs: [change-detection, test, push-to-registry]
-    if: |
-      always() &&
-      (
-        (github.event_name == 'push' && github.ref_name == 'feature-k8s-migration-monitoring-observability' && needs.push-to-registry.result == 'success') || 
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy' && (needs.test.result == 'success' || needs.test.result == 'skipped')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && needs.push-to-registry.result == 'success')
-      )
- 
-    runs-on: ubuntu-latest
-    environment: production
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        - name: Upload vulnerability scan results
+          if: always()
+          uses: actions/upload-artifact@v5
+          with:
+            name: inspector-scan-results
+            path: |
+                *.csv
+                *.md
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::661510969671:role/GitHubActions-Terraform-Role
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.15.6
-
-      - name: Inject Short Git SHA into Terraform Variables
-        run: |
-          # Extract the 7-character short commit hash
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "Generated Short SHA: $SHORT_SHA"
-          
-          # Write the variable directly into the app workspace directory folder
-          echo "me_website_image_tag = \"$SHORT_SHA\"" > "$GITHUB_WORKSPACE/terraform/app/image.auto.tfvars"
-          
-          # Visual confirmation verification printout
-          cat "$GITHUB_WORKSPACE/terraform/app/image.auto.tfvars"
-
-      - name: Build Grafana Lambda Layer Artifact
-        run: |
-          LAYER_DIR="$GITHUB_WORKSPACE/terraform/platform/layer"
-          mkdir -p "$LAYER_DIR/python"
-          python -m pip install "boto3==1.34.144" -t "$LAYER_DIR/python"
-          cd "$LAYER_DIR"
-          zip -qr python.zip python
-
-      - name: Process Dynamic Change Dependency Pipeline
-        run: ./terraform_deploy.sh
-        env:
-          ACTION_TYPE: "${{ inputs.action || 'apply' }}"
-          TARGET_WS: "${{ inputs.target_workspace || 'all' }}"
-          CHG_NET: "${{ needs.change-detection.outputs.network }}"
-          CHG_EKS: "${{ needs.change-detection.outputs.eks }}"
-          CHG_PLAT: "${{ needs.change-detection.outputs.platform }}"
-          CHG_APP: "${{ needs.change-detection.outputs.app }}"
-          # Automatically authenticates Terraform CLI with app.terraform.io
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }} 
+        - name: Push image to registries
+          uses: docker/build-push-action@v6
+          with:
+            context: ./me_website_project
+            target: production
+            push: true
+            tags: ${{ steps.meta.outputs.tags }} 
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha # Use the cache from the scan-build step
