@@ -49,13 +49,16 @@ execute_terraform_with_retry() {
 }
 
 wait_for_app_load_balancer_cleanup() {
-  # Default matches the fixed ingress annotation in terraform/app/kubernetes.tf.
   local lb_name="${APP_INGRESS_LB_NAME:-k8s-me-website-app-alb}"
   local lb_arn=""
   local describe_exit=0
-  local max_checks=30
+  local max_checks="${APP_INGRESS_LB_CLEANUP_MAX_CHECKS:-30}"
   local check=1
-  local sleep_seconds=20
+  local sleep_seconds="${APP_INGRESS_LB_CLEANUP_SLEEP_SECONDS:-20}"
+
+  if [[ -z "${APP_INGRESS_LB_NAME:-}" ]]; then
+    echo "ℹ️ APP_INGRESS_LB_NAME not set. Defaulting to '$lb_name' to match the ingress annotation in terraform/app/kubernetes.tf."
+  fi
 
   if lb_arn=$(aws elbv2 describe-load-balancers \
     --names "$lb_name" \
@@ -74,7 +77,7 @@ wait_for_app_load_balancer_cleanup() {
 
   echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before platform destroy removes the AWS Load Balancer Controller..."
   if ! aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1; then
-    true
+    echo "⚠️ Unable to request ALB deletion for '$lb_name'. Continuing to poll in case cleanup is already in progress."
   fi
 
   while [[ $check -le $max_checks ]]; do
