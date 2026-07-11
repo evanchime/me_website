@@ -64,6 +64,8 @@ wait_for_app_load_balancer_cleanup() {
       exit 1
     fi
 
+    # Extract the fixed ingress annotation value:
+    # "alb.ingress.kubernetes.io/load-balancer-name" = "<name>"
     lb_name=$(sed -n 's/.*"alb\.ingress\.kubernetes\.io\/load-balancer-name"[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ingress_file" | head -n 1)
 
     if [[ -z "$lb_name" ]]; then
@@ -115,7 +117,7 @@ wait_for_app_load_balancer_cleanup() {
     check=$((check + 1))
   done
 
-  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify and delete it before retrying the destroy."
+  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn <alb-arn>."
   exit 1
 }
 
