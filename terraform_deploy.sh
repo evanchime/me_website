@@ -52,6 +52,7 @@ wait_for_app_load_balancer_cleanup() {
   local ingress_file="${APP_INGRESS_CONFIG_FILE:-$GITHUB_WORKSPACE/terraform/app/kubernetes.tf}"
   local lb_name="${APP_INGRESS_LB_NAME:-}"
   local lb_arn=""
+  local initial_lb_arn=""
   local describe_exit=0
   local max_checks="${APP_INGRESS_LB_CLEANUP_MAX_CHECKS:-30}"
   local check=1
@@ -73,7 +74,7 @@ wait_for_app_load_balancer_cleanup() {
       exit 1
     fi
 
-    echo "ℹ️ APP_INGRESS_LB_NAME not set. Discovered '$lb_name' from terraform/app/kubernetes.tf."
+    echo "ℹ️ APP_INGRESS_LB_NAME not set. Discovered '$lb_name' from $ingress_file."
   fi
 
   if lb_arn=$(aws elbv2 describe-load-balancers \
@@ -90,6 +91,7 @@ wait_for_app_load_balancer_cleanup() {
     echo "ℹ️ No remaining ALB named '$lb_name' detected after app destroy."
     return 0
   fi
+  initial_lb_arn="$lb_arn"
 
   echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before the platform destroy step removes the AWS Load Balancer Controller..."
   if ! aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1; then
@@ -117,7 +119,7 @@ wait_for_app_load_balancer_cleanup() {
     check=$((check + 1))
   done
 
-  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn $lb_arn."
+  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn ${initial_lb_arn:-$lb_arn}."
   exit 1
 }
 
