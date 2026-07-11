@@ -138,7 +138,7 @@ if [[ "${ACTION_TYPE}" == "destroy" ]]; then
     RUN_APP=true
     
   else
-    echo "🛑 Error: Destroying '${TARGET_WS}' directly is blocked. You must destroy 'all', 'network', 'platform', or 'app'."
+    echo "🛑 Error: Invalid destroy target '${TARGET_WS}'. Valid targets are 'all', 'network' (cascades through app, platform, EKS, and network), 'eks', 'platform', and 'app'."
     exit 1
   fi
 
