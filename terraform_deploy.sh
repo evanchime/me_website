@@ -129,7 +129,7 @@ if [[ "${ACTION_TYPE}" == "destroy" ]]; then
   TF_COMMAND="destroy -auto-approve -input=false -lock-timeout=3m"
 
   if [[ "${TARGET_WS}" == "all" ]]; then
-    echo "⚠️ Full teardown initiated! Reversing sequence order."
+    echo "⚠️ Full teardown initiated! Destroy order: app → platform → EKS → network."
     WORKSPACE_ORDER="app platform eks network"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
 
@@ -154,7 +154,7 @@ if [[ "${ACTION_TYPE}" == "destroy" ]]; then
     RUN_APP=true
     
   else
-    echo "🛑 Error: Invalid destroy target '${TARGET_WS}'. Valid targets are 'all'; 'network' (cascades through app, platform, EKS, and network); 'eks' (cascades through app, platform, and EKS); 'platform' (cascades through app and platform); and 'app'."
+    echo "🛑 Error: Invalid destroy target '${TARGET_WS}'. Valid targets are: all, network, eks, platform, app."
     exit 1
   fi
 
