@@ -53,6 +53,7 @@ execute_terraform_with_retry() {
 }
 
 wait_for_app_load_balancer_cleanup() {
+  # Default matches the fixed ingress annotation in terraform/app/kubernetes.tf.
   local lb_name="${APP_INGRESS_LB_NAME:-k8s-me-website-app-alb}"
   local lb_arn=""
   local describe_exit=0
@@ -111,13 +112,18 @@ RUN_APP=false
 if [[ "${ACTION_TYPE}" == "destroy" ]]; then
   TF_COMMAND="destroy -auto-approve -input=false -lock-timeout=3m"
 
-  if [[ "${TARGET_WS}" == "all" || "${TARGET_WS}" == "network" ]]; then
+  if [[ "${TARGET_WS}" == "all" ]]; then
     echo "⚠️ Full teardown initiated! Reversing sequence order."
     WORKSPACE_ORDER="app platform eks network"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
 
+  elif [[ "${TARGET_WS}" == "network" ]]; then
+    echo "⚠️ Target Destroy: Network foundation. Tearing down app, platform, EKS, then network."
+    WORKSPACE_ORDER="app platform eks network"
+    RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
+
   elif [[ "${TARGET_WS}" == "eks" ]]; then
-    echo "⚠️ Target Destroy: Eks. Must tear down downstream Platform and App layer first."
+    echo "⚠️ Target Destroy: EKS. Must tear down downstream Platform and App layer first."
     WORKSPACE_ORDER="app platform eks"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true
 
