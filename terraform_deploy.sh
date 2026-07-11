@@ -49,7 +49,7 @@ execute_terraform_with_retry() {
 }
 
 wait_for_app_load_balancer_cleanup() {
-  local ingress_file="$GITHUB_WORKSPACE/terraform/app/kubernetes.tf"
+  local ingress_file="${APP_INGRESS_CONFIG_FILE:-$GITHUB_WORKSPACE/terraform/app/kubernetes.tf}"
   local lb_name="${APP_INGRESS_LB_NAME:-}"
   local lb_arn=""
   local describe_exit=0
@@ -64,7 +64,7 @@ wait_for_app_load_balancer_cleanup() {
       exit 1
     fi
 
-    # Extract the fixed ingress annotation value:
+    # Extract the fixed ingress annotation value from a single-line mapping such as:
     # "alb.ingress.kubernetes.io/load-balancer-name" = "<name>"
     lb_name=$(sed -n 's/.*"alb\.ingress\.kubernetes\.io\/load-balancer-name"[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ingress_file" | head -n 1)
 
@@ -91,7 +91,7 @@ wait_for_app_load_balancer_cleanup() {
     return 0
   fi
 
-  echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before platform destroy removes the AWS Load Balancer Controller..."
+  echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before the platform destroy step removes the AWS Load Balancer Controller..."
   if ! aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1; then
     echo "⚠️ Unable to request ALB deletion for '$lb_name'. Continuing to poll in case cleanup is already in progress."
   fi
@@ -117,7 +117,7 @@ wait_for_app_load_balancer_cleanup() {
     check=$((check + 1))
   done
 
-  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn <alb-arn>."
+  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s). Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn $lb_arn."
   exit 1
 }
 
