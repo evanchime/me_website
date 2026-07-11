@@ -55,27 +55,51 @@ execute_terraform_with_retry() {
 wait_for_app_load_balancer_cleanup() {
   local lb_name="${APP_INGRESS_LB_NAME:-k8s-me-website-app-alb}"
   local lb_arn=""
+  local describe_exit=0
+  local max_checks=30
+  local check=1
+  local sleep_seconds=20
 
   set +e
   lb_arn=$(aws elbv2 describe-load-balancers \
     --names "$lb_name" \
     --query 'LoadBalancers[0].LoadBalancerArn' \
     --output text 2>/dev/null)
+  describe_exit=$?
   set -e
 
-  if [[ -z "$lb_arn" || "$lb_arn" == "None" ]]; then
+  if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
     echo "ℹ️ No remaining ALB named '$lb_name' detected after app destroy."
     return 0
   fi
 
-  echo "⏳ Waiting for app ingress ALB '$lb_name' to be removed before destroying platform resources..."
+  echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before platform destroy removes the AWS Load Balancer Controller..."
 
   set +e
   aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1
   set -e
 
-  aws elbv2 wait load-balancers-deleted --load-balancer-arns "$lb_arn"
-  echo "✅ ALB '$lb_name' has been removed."
+  while [[ $check -le $max_checks ]]; do
+    set +e
+    lb_arn=$(aws elbv2 describe-load-balancers \
+      --names "$lb_name" \
+      --query 'LoadBalancers[0].LoadBalancerArn' \
+      --output text 2>/dev/null)
+    describe_exit=$?
+    set -e
+
+    if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
+      echo "✅ ALB '$lb_name' has been removed."
+      return 0
+    fi
+
+    echo "⏳ ALB '$lb_name' still exists. Rechecking in ${sleep_seconds}s (${check}/${max_checks})..."
+    sleep "$sleep_seconds"
+    check=$((check + 1))
+  done
+
+  echo "::error::ALB '$lb_name' still exists after waiting for cleanup."
+  exit 1
 }
 
 # Initialize the execution flags to false by default
