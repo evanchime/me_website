@@ -22,16 +22,12 @@ execute_terraform_with_retry() {
   while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
     echo "▶️ Running 'terraform $TF_COMMAND' (Attempt $ATTEMPT of $MAX_ATTEMPTS)..."
 
-    set +e 
-    terraform $TF_COMMAND
-    EXIT_CODE=$?
-    set -e 
-
-    if [ $EXIT_CODE -eq 0 ]; then
+    if terraform $TF_COMMAND; then
         echo "✅ Successfully executed configuration changes inside /$dir!"
         SUCCESS=true
         break 
     else
+        EXIT_CODE=$?
         echo "⚠️ Error: 'terraform $TF_COMMAND' failed with code $EXIT_CODE."
 
         if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
@@ -61,13 +57,15 @@ wait_for_app_load_balancer_cleanup() {
   local check=1
   local sleep_seconds=20
 
-  set +e
-  lb_arn=$(aws elbv2 describe-load-balancers \
+  if lb_arn=$(aws elbv2 describe-load-balancers \
     --names "$lb_name" \
     --query 'LoadBalancers[0].LoadBalancerArn' \
-    --output text 2>/dev/null)
-  describe_exit=$?
-  set -e
+    --output text 2>/dev/null); then
+    describe_exit=0
+  else
+    describe_exit=$?
+    lb_arn=""
+  fi
 
   if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
     echo "ℹ️ No remaining ALB named '$lb_name' detected after app destroy."
@@ -75,19 +73,20 @@ wait_for_app_load_balancer_cleanup() {
   fi
 
   echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before platform destroy removes the AWS Load Balancer Controller..."
-
-  set +e
-  aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1
-  set -e
+  if ! aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1; then
+    true
+  fi
 
   while [[ $check -le $max_checks ]]; do
-    set +e
-    lb_arn=$(aws elbv2 describe-load-balancers \
+    if lb_arn=$(aws elbv2 describe-load-balancers \
       --names "$lb_name" \
       --query 'LoadBalancers[0].LoadBalancerArn' \
-      --output text 2>/dev/null)
-    describe_exit=$?
-    set -e
+      --output text 2>/dev/null); then
+      describe_exit=0
+    else
+      describe_exit=$?
+      lb_arn=""
+    fi
 
     if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
       echo "✅ ALB '$lb_name' has been removed."
@@ -118,7 +117,7 @@ if [[ "${ACTION_TYPE}" == "destroy" ]]; then
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
 
   elif [[ "${TARGET_WS}" == "network" ]]; then
-    echo "⚠️ Target Destroy: Network foundation. Tearing down app, platform, EKS, then network."
+    echo "⚠️ Target Destroy: Network foundation. Cascading through app, platform, EKS, then network."
     WORKSPACE_ORDER="app platform eks network"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
 
