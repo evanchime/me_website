@@ -22,16 +22,12 @@ execute_terraform_with_retry() {
   while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
     echo "▶️ Running 'terraform $TF_COMMAND' (Attempt $ATTEMPT of $MAX_ATTEMPTS)..."
 
-    set +e 
-    terraform $TF_COMMAND
-    EXIT_CODE=$?
-    set -e 
-
-    if [ $EXIT_CODE -eq 0 ]; then
+    if terraform $TF_COMMAND; then
         echo "✅ Successfully executed configuration changes inside /$dir!"
         SUCCESS=true
         break 
     else
+        EXIT_CODE=$?
         echo "⚠️ Error: 'terraform $TF_COMMAND' failed with code $EXIT_CODE."
 
         if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
@@ -52,6 +48,82 @@ execute_terraform_with_retry() {
   fi
 }
 
+wait_for_app_load_balancer_cleanup() {
+  local ingress_file="${APP_INGRESS_CONFIG_FILE:-$GITHUB_WORKSPACE/terraform/app/kubernetes.tf}"
+  local lb_name="${APP_INGRESS_LB_NAME:-}"
+  local lb_arn=""
+  local initial_lb_arn=""
+  local describe_exit=0
+  local max_checks="${APP_INGRESS_LB_CLEANUP_MAX_CHECKS:-30}"
+  local check=1
+  local sleep_seconds="${APP_INGRESS_LB_CLEANUP_SLEEP_SECONDS:-20}"
+  local total_wait_time=$((max_checks * sleep_seconds))
+
+  if [[ -z "$lb_name" ]]; then
+    if [[ ! -f "$ingress_file" ]]; then
+      echo "::error::APP_INGRESS_LB_NAME is not set and '$ingress_file' is unavailable for discovery."
+      exit 1
+    fi
+
+    # Extract the fixed ingress annotation value from a single-line, double-quoted mapping such as:
+    # "alb.ingress.kubernetes.io/load-balancer-name" = "<name>"
+    lb_name=$(sed -n 's/.*"alb\.ingress\.kubernetes\.io\/load-balancer-name"[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ingress_file" | head -n 1)
+
+    if [[ -z "$lb_name" ]]; then
+      echo "::error::Unable to discover the app ingress load balancer name from '$ingress_file'."
+      exit 1
+    fi
+
+    echo "ℹ️ APP_INGRESS_LB_NAME not set. Discovered '$lb_name' from $ingress_file."
+  fi
+
+  if lb_arn=$(aws elbv2 describe-load-balancers \
+    --names "$lb_name" \
+    --query 'LoadBalancers[0].LoadBalancerArn' \
+    --output text 2>/dev/null); then
+    describe_exit=0
+  else
+    describe_exit=$?
+    lb_arn=""
+  fi
+
+  if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
+    echo "ℹ️ No remaining ALB named '$lb_name' detected after app destroy."
+    return 0
+  fi
+  initial_lb_arn="$lb_arn"
+
+  echo "🗑️ Requesting deletion of controller-managed ALB '$lb_name' before the platform destroy step removes the AWS Load Balancer Controller..."
+  if ! aws elbv2 delete-load-balancer --load-balancer-arn "$lb_arn" >/dev/null 2>&1; then
+    echo "⚠️ Unable to request ALB deletion for '$lb_name'. Continuing to poll in case cleanup is already in progress."
+  fi
+
+  while [[ $check -le $max_checks ]]; do
+    if lb_arn=$(aws elbv2 describe-load-balancers \
+      --names "$lb_name" \
+      --query 'LoadBalancers[0].LoadBalancerArn' \
+      --output text 2>/dev/null); then
+      describe_exit=0
+    else
+      describe_exit=$?
+      lb_arn=""
+    fi
+
+    if [[ $describe_exit -ne 0 || -z "$lb_arn" || "$lb_arn" == "None" ]]; then
+      echo "✅ ALB '$lb_name' has been removed."
+      return 0
+    fi
+
+    echo "⏳ ALB '$lb_name' still exists. Rechecking in ${sleep_seconds}s (${check}/${max_checks})..."
+    sleep "$sleep_seconds"
+    check=$((check + 1))
+  done
+
+  echo "::error::ALB '$lb_name' still exists after ${max_checks} checks (${total_wait_time}s)."
+  echo "::error::Manually verify it and, if needed, delete it with: aws elbv2 delete-load-balancer --load-balancer-arn ${initial_lb_arn:-$lb_arn}."
+  exit 1
+}
+
 # Initialize the execution flags to false by default
 RUN_NET=false 
 RUN_EKS=false
@@ -61,13 +133,18 @@ RUN_APP=false
 if [[ "${ACTION_TYPE}" == "destroy" ]]; then
   TF_COMMAND="destroy -auto-approve -input=false -lock-timeout=3m"
 
-  if [[ "${TARGET_WS}" == "all" || "${TARGET_WS}" == "network" ]]; then
-    echo "⚠️ Full teardown initiated! Reversing sequence order."
+  if [[ "${TARGET_WS}" == "all" ]]; then
+    echo "⚠️ Full teardown initiated! Destroy order: app → platform → EKS → network."
+    WORKSPACE_ORDER="app platform eks network"
+    RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
+
+  elif [[ "${TARGET_WS}" == "network" ]]; then
+    echo "⚠️ Target Destroy: Network foundation. Cascading through app, platform, EKS, then network."
     WORKSPACE_ORDER="app platform eks network"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true; RUN_NET=true
 
   elif [[ "${TARGET_WS}" == "eks" ]]; then
-    echo "⚠️ Target Destroy: Eks. Must tear down downstream Platform and App layer first."
+    echo "⚠️ Target Destroy: EKS. Must tear down downstream Platform and App layer first."
     WORKSPACE_ORDER="app platform eks"
     RUN_APP=true; RUN_PLAT=true; RUN_EKS=true
 
@@ -82,7 +159,7 @@ if [[ "${ACTION_TYPE}" == "destroy" ]]; then
     RUN_APP=true
     
   else
-    echo "🛑 Error: Destroying '${TARGET_WS}' directly is blocked. You must destroy 'all', 'network', 'platform', or 'app'."
+    echo "🛑 Error: Invalid destroy target '${TARGET_WS}'. Valid targets are: all, network, eks, platform, app."
     exit 1
   fi
 
@@ -133,6 +210,7 @@ for dir in $WORKSPACE_ORDER; do
       
       echo "✅ Grafana token refreshed. Proceeding with app destroy."
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
+      wait_for_app_load_balancer_cleanup
 
     # 3. STANDARD CASE: Run the folder normally
     else
