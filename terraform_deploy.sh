@@ -124,6 +124,56 @@ wait_for_app_load_balancer_cleanup() {
   exit 1
 }
 
+cleanup_residual_vpc_security_groups() {
+  local network_dir="$GITHUB_WORKSPACE/terraform/network"
+  local max_checks="${VPC_SECURITY_GROUP_CLEANUP_MAX_CHECKS:-30}"
+  local sleep_seconds="${VPC_SECURITY_GROUP_CLEANUP_SLEEP_SECONDS:-20}"
+  local check=1
+  local vpc_id=""
+  local residual_groups=""
+
+  echo "🔎 Discovering the network VPC before the destroy step..."
+  cd "$network_dir" && terraform init -input=false >/dev/null
+  vpc_id=$(terraform output -raw vpc_id)
+
+  if [[ -z "$vpc_id" ]]; then
+    echo "::error::Unable to discover the network VPC ID before destroy."
+    exit 1
+  fi
+
+  while [[ $check -le $max_checks ]]; do
+    residual_groups=$(aws ec2 describe-security-groups \
+      --filters "Name=vpc-id,Values=$vpc_id" \
+      --query 'SecurityGroups[?GroupName!=`default`].[GroupId,GroupName]' \
+      --output text 2>/dev/null || true)
+
+    if [[ -z "$residual_groups" ]]; then
+      echo "✅ No residual non-default security groups remain in VPC '$vpc_id'."
+      return 0
+    fi
+
+    echo "🧹 Residual security groups are still present in VPC '$vpc_id'. Attempting cleanup (${check}/${max_checks}):"
+    printf '%s\n' "$residual_groups"
+
+    while IFS=$'\t' read -r group_id group_name; do
+      [[ -z "${group_id:-}" ]] && continue
+
+      if aws ec2 delete-security-group --group-id "$group_id" >/dev/null 2>&1; then
+        echo "✅ Deleted residual security group '$group_name' ($group_id)."
+      else
+        echo "⏳ Security group '$group_name' ($group_id) is still in use. Waiting before retrying."
+      fi
+    done <<< "$residual_groups"
+
+    sleep "$sleep_seconds"
+    check=$((check + 1))
+  done
+
+  echo "::error::Residual non-default security groups still exist in VPC '$vpc_id' after ${max_checks} checks."
+  echo "::error::Manually inspect them with: aws ec2 describe-security-groups --filters Name=vpc-id,Values=$vpc_id --query 'SecurityGroups[?GroupName!=\`default\`].[GroupId,GroupName]' --output table"
+  exit 1
+}
+
 # Initialize the execution flags to false by default
 RUN_NET=false 
 RUN_EKS=false
@@ -212,7 +262,12 @@ for dir in $WORKSPACE_ORDER; do
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
       wait_for_app_load_balancer_cleanup
 
-    # 3. STANDARD CASE: Run the folder normally
+    # 3. SPECIAL CASE: Clear out residual workload security groups before destroying the network VPC
+    elif [[ "${ACTION_TYPE}" == "destroy" && "$dir" == "network" ]]; then
+      cleanup_residual_vpc_security_groups
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
+
+    # 4. STANDARD CASE: Run the folder normally
     else
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
     fi
