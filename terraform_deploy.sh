@@ -134,7 +134,9 @@ cleanup_residual_vpc_security_groups() {
   local vpc_id=""
   local vpc_lookup_output=""
   local residual_groups=""
+  local residual_group_count=0
   local previous_residual_groups=""
+  local previous_residual_group_count=0
 
   echo "🔎 Discovering the network VPC before the destroy step..."
   if ! vpc_lookup_output=$(
@@ -163,22 +165,28 @@ cleanup_residual_vpc_security_groups() {
       echo "✅ No residual non-default security groups remain in VPC '$vpc_id'."
       return 0
     fi
+    residual_group_count=$(printf '%s\n' "$residual_groups" | sed '/^$/d' | wc -l | tr -d ' ')
 
     echo "🧹 Residual security groups are still present in VPC '$vpc_id'. Attempting cleanup (${check}/${max_checks}):"
     printf '%s\n' "$residual_groups"
 
-    while read -r group_id group_name; do
+    while read -r group_id group_name extra_fields; do
       [[ -z "${group_id:-}" ]] && continue
-      group_name="${group_name:-unknown-group-name}"
+      if [[ -z "${group_name:-}" || -n "${extra_fields:-}" ]]; then
+        echo "::error::Malformed security group cleanup row: '$group_id ${group_name:-} ${extra_fields:-}'"
+        continue
+      fi
 
-      if aws ec2 delete-security-group --group-id "$group_id" >/dev/null 2>&1; then
+      if delete_error=$(aws ec2 delete-security-group --group-id "$group_id" 2>&1 >/dev/null); then
         echo "✅ Deleted residual security group '$group_name' ($group_id)."
       else
-        echo "⏳ Security group '$group_name' ($group_id) is still in use. Waiting before retrying."
+        echo "⏳ Security group '$group_name' ($group_id) is still in use. Waiting before retrying. AWS said: ${delete_error:-no error details returned}"
       fi
     done <<< "$residual_groups"
 
-    if [[ "$residual_groups" == "$previous_residual_groups" ]]; then
+    if [[ $residual_group_count -lt $previous_residual_group_count ]]; then
+      stalled_checks=0
+    elif [[ "$residual_groups" == "$previous_residual_groups" ]]; then
       stalled_checks=$((stalled_checks + 1))
       if [[ $stalled_checks -ge $max_stalled_checks ]]; then
         echo "::error::Residual security groups in VPC '$vpc_id' have not changed for ${stalled_checks} checks."
@@ -186,8 +194,9 @@ cleanup_residual_vpc_security_groups() {
       fi
     else
       stalled_checks=0
-      previous_residual_groups="$residual_groups"
     fi
+    previous_residual_groups="$residual_groups"
+    previous_residual_group_count=$residual_group_count
 
     sleep "$sleep_seconds"
     check=$((check + 1))
