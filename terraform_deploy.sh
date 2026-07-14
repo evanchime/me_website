@@ -127,17 +127,26 @@ wait_for_app_load_balancer_cleanup() {
 cleanup_residual_vpc_security_groups() {
   local network_dir="$GITHUB_WORKSPACE/terraform/network"
   local max_checks="${VPC_SECURITY_GROUP_CLEANUP_MAX_CHECKS:-30}"
+  local max_stalled_checks="${VPC_SECURITY_GROUP_CLEANUP_MAX_STALLED_CHECKS:-10}"
   local sleep_seconds="${VPC_SECURITY_GROUP_CLEANUP_SLEEP_SECONDS:-20}"
   local check=1
+  local stalled_checks=0
   local vpc_id=""
+  local vpc_lookup_output=""
   local residual_groups=""
+  local previous_residual_groups=""
 
   echo "🔎 Discovering the network VPC before the destroy step..."
-  vpc_id=$(
+  if ! vpc_lookup_output=$(
     cd "$network_dir" && \
     terraform init -input=false >/dev/null && \
     terraform output -raw vpc_id
-  )
+  ); then
+    echo "::error::Unable to discover the network VPC ID before destroy."
+    echo "::error::Terraform output failed: $vpc_lookup_output"
+    exit 1
+  fi
+  vpc_id="$vpc_lookup_output"
 
   if [[ -z "$vpc_id" ]]; then
     echo "::error::Unable to discover the network VPC ID before destroy."
@@ -160,6 +169,7 @@ cleanup_residual_vpc_security_groups() {
 
     while read -r group_id group_name; do
       [[ -z "${group_id:-}" ]] && continue
+      group_name="${group_name:-unknown-group-name}"
 
       if aws ec2 delete-security-group --group-id "$group_id" >/dev/null 2>&1; then
         echo "✅ Deleted residual security group '$group_name' ($group_id)."
@@ -167,6 +177,17 @@ cleanup_residual_vpc_security_groups() {
         echo "⏳ Security group '$group_name' ($group_id) is still in use. Waiting before retrying."
       fi
     done <<< "$residual_groups"
+
+    if [[ "$residual_groups" == "$previous_residual_groups" ]]; then
+      stalled_checks=$((stalled_checks + 1))
+      if [[ $stalled_checks -ge $max_stalled_checks ]]; then
+        echo "::error::Residual security groups in VPC '$vpc_id' have not changed for ${stalled_checks} checks."
+        exit 1
+      fi
+    else
+      stalled_checks=0
+      previous_residual_groups="$residual_groups"
+    fi
 
     sleep "$sleep_seconds"
     check=$((check + 1))
