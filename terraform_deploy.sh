@@ -134,9 +134,8 @@ cleanup_residual_vpc_security_groups() {
   local vpc_id=""
   local vpc_lookup_output=""
   local residual_groups=""
-  local residual_group_count=0
-  local previous_residual_groups=""
-  local previous_residual_group_count=0
+  local current_group_ids=""
+  local previous_group_ids=""
 
   echo "🔎 Discovering the network VPC before the destroy step..."
   if ! vpc_lookup_output=$(
@@ -165,7 +164,7 @@ cleanup_residual_vpc_security_groups() {
       echo "✅ No residual non-default security groups remain in VPC '$vpc_id'."
       return 0
     fi
-    residual_group_count=$(printf '%s\n' "$residual_groups" | sed '/^$/d' | wc -l | tr -d ' ')
+    current_group_ids=$(printf '%s\n' "$residual_groups" | awk 'NF {print $1}' | sort)
 
     echo "🧹 Residual security groups are still present in VPC '$vpc_id'. Attempting cleanup (${check}/${max_checks}):"
     printf '%s\n' "$residual_groups"
@@ -184,9 +183,7 @@ cleanup_residual_vpc_security_groups() {
       fi
     done <<< "$residual_groups"
 
-    if [[ $residual_group_count -lt $previous_residual_group_count ]]; then
-      stalled_checks=0
-    elif [[ "$residual_groups" == "$previous_residual_groups" ]]; then
+    if [[ "$current_group_ids" == "$previous_group_ids" ]]; then
       stalled_checks=$((stalled_checks + 1))
       if [[ $stalled_checks -ge $max_stalled_checks ]]; then
         echo "::error::Residual security groups in VPC '$vpc_id' have not changed for ${stalled_checks} checks."
@@ -195,8 +192,7 @@ cleanup_residual_vpc_security_groups() {
     else
       stalled_checks=0
     fi
-    previous_residual_groups="$residual_groups"
-    previous_residual_group_count=$residual_group_count
+    previous_group_ids="$current_group_ids"
 
     sleep "$sleep_seconds"
     check=$((check + 1))
