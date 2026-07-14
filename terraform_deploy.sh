@@ -156,8 +156,8 @@ cleanup_residual_vpc_security_groups() {
   while [[ $check -le $max_checks ]]; do
     residual_groups=$(aws ec2 describe-security-groups \
       --filters "Name=vpc-id,Values=$vpc_id" \
-      --query 'SecurityGroups[?GroupName!=`default`].[GroupId,GroupName]' \
-      --output text 2>/dev/null || true)
+      --query "SecurityGroups[?GroupName!='default'].[GroupId,GroupName]" \
+      --output text 2>/dev/null | sort || true)
 
     if [[ -z "$residual_groups" ]]; then
       echo "✅ No residual non-default security groups remain in VPC '$vpc_id'."
@@ -287,7 +287,7 @@ for dir in $WORKSPACE_ORDER; do
       wait_for_app_load_balancer_cleanup
 
     # 3. SPECIAL CASE: Clear out residual workload security groups before destroying the network VPC
-    elif [[ "${ACTION_TYPE}" == "destroy" && "$dir" == "network" ]]; then
+    elif [[ "${ACTION_TYPE}" == "destroy" && ( "$dir" == "network" || "$dir" == */network ) ]]; then
       cleanup_residual_vpc_security_groups
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
 
