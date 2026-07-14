@@ -133,8 +133,11 @@ cleanup_residual_vpc_security_groups() {
   local residual_groups=""
 
   echo "🔎 Discovering the network VPC before the destroy step..."
-  cd "$network_dir" && terraform init -input=false >/dev/null
-  vpc_id=$(terraform output -raw vpc_id)
+  vpc_id=$(
+    cd "$network_dir" && \
+    terraform init -input=false >/dev/null && \
+    terraform output -raw vpc_id
+  )
 
   if [[ -z "$vpc_id" ]]; then
     echo "::error::Unable to discover the network VPC ID before destroy."
@@ -155,7 +158,7 @@ cleanup_residual_vpc_security_groups() {
     echo "🧹 Residual security groups are still present in VPC '$vpc_id'. Attempting cleanup (${check}/${max_checks}):"
     printf '%s\n' "$residual_groups"
 
-    while IFS=$'\t' read -r group_id group_name; do
+    while read -r group_id group_name; do
       [[ -z "${group_id:-}" ]] && continue
 
       if aws ec2 delete-security-group --group-id "$group_id" >/dev/null 2>&1; then
@@ -170,7 +173,7 @@ cleanup_residual_vpc_security_groups() {
   done
 
   echo "::error::Residual non-default security groups still exist in VPC '$vpc_id' after ${max_checks} checks."
-  echo "::error::Manually inspect them with: aws ec2 describe-security-groups --filters Name=vpc-id,Values=$vpc_id --query 'SecurityGroups[?GroupName!=\`default\`].[GroupId,GroupName]' --output table"
+  echo "::error::Manually inspect them with: aws ec2 describe-security-groups --filters Name=vpc-id,Values=$vpc_id --output table"
   exit 1
 }
 
