@@ -745,8 +745,9 @@ resource "helm_release" "external_secrets" {
   chart            = "external-secrets"
   namespace        = kubernetes_namespace_v1.external_secrets.metadata[0].name
   version          = "2.4.1"
-  wait = true 
-  wait_for_jobs = true
+  wait             = true
+  wait_for_jobs    = true
+  upgrade_install  = true
 
   set = [
     {
