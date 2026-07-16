@@ -124,6 +124,85 @@ wait_for_app_load_balancer_cleanup() {
   exit 1
 }
 
+cleanup_residual_vpc_security_groups() {
+  local network_dir="$GITHUB_WORKSPACE/terraform/network"
+  local max_checks="${VPC_SECURITY_GROUP_CLEANUP_MAX_CHECKS:-30}"
+  local max_stalled_checks="${VPC_SECURITY_GROUP_CLEANUP_MAX_STALLED_CHECKS:-10}"
+  local sleep_seconds="${VPC_SECURITY_GROUP_CLEANUP_SLEEP_SECONDS:-20}"
+  local check=1
+  local stalled_checks=0
+  local vpc_id=""
+  local vpc_lookup_output=""
+  local residual_groups=""
+  local current_group_ids=""
+  local previous_group_ids=""
+
+  echo "🔎 Discovering the network VPC before the destroy step..."
+  if ! vpc_lookup_output=$(
+    cd "$network_dir" && \
+    terraform init -input=false >/dev/null && \
+    terraform output -raw vpc_id
+  ); then
+    echo "::error::Unable to discover the network VPC ID before destroy."
+    echo "::error::Terraform output failed: $vpc_lookup_output"
+    exit 1
+  fi
+  vpc_id="$vpc_lookup_output"
+
+  if [[ -z "$vpc_id" ]]; then
+    echo "::error::Unable to discover the network VPC ID before destroy."
+    exit 1
+  fi
+
+  while [[ $check -le $max_checks ]]; do
+    residual_groups=$(aws ec2 describe-security-groups \
+      --filters "Name=vpc-id,Values=$vpc_id" \
+      --query "SecurityGroups[?GroupName!='default'].[GroupId,GroupName]" \
+      --output text 2>/dev/null | sort || true)
+
+    if [[ -z "$residual_groups" ]]; then
+      echo "✅ No residual non-default security groups remain in VPC '$vpc_id'."
+      return 0
+    fi
+    current_group_ids=$(printf '%s\n' "$residual_groups" | awk 'NF {print $1}' | sort)
+
+    echo "🧹 Residual security groups are still present in VPC '$vpc_id'. Attempting cleanup (${check}/${max_checks}):"
+    printf '%s\n' "$residual_groups"
+
+    while read -r group_id group_name extra_fields; do
+      [[ -z "${group_id:-}" ]] && continue
+      if [[ -z "${group_name:-}" || -n "${extra_fields:-}" ]]; then
+        echo "::error::Malformed security group cleanup row: '$group_id ${group_name:-} ${extra_fields:-}'"
+        continue
+      fi
+
+      if delete_error=$(aws ec2 delete-security-group --group-id "$group_id" 2>&1 >/dev/null); then
+        echo "✅ Deleted residual security group '$group_name' ($group_id)."
+      else
+        echo "⏳ Security group '$group_name' ($group_id) is still in use. Waiting before retrying. AWS said: ${delete_error:-no error details returned}"
+      fi
+    done <<< "$residual_groups"
+
+    if [[ "$current_group_ids" == "$previous_group_ids" ]]; then
+      stalled_checks=$((stalled_checks + 1))
+      if [[ $stalled_checks -ge $max_stalled_checks ]]; then
+        echo "::error::Residual security groups in VPC '$vpc_id' have not changed for ${stalled_checks} checks."
+        exit 1
+      fi
+    else
+      stalled_checks=0
+    fi
+    previous_group_ids="$current_group_ids"
+
+    sleep "$sleep_seconds"
+    check=$((check + 1))
+  done
+
+  echo "::error::Residual non-default security groups still exist in VPC '$vpc_id' after ${max_checks} checks."
+  echo "::error::Manually inspect them with: aws ec2 describe-security-groups --filters Name=vpc-id,Values=$vpc_id --output table"
+  exit 1
+}
+
 # Initialize the execution flags to false by default
 RUN_NET=false 
 RUN_EKS=false
@@ -212,7 +291,12 @@ for dir in $WORKSPACE_ORDER; do
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
       wait_for_app_load_balancer_cleanup
 
-    # 3. STANDARD CASE: Run the folder normally
+    # 3. SPECIAL CASE: Clear out residual workload security groups before destroying the network VPC
+    elif [[ "${ACTION_TYPE}" == "destroy" && ( "$dir" == "network" || "$dir" == */network ) ]]; then
+      cleanup_residual_vpc_security_groups
+      execute_terraform_with_retry "$dir" "$TF_COMMAND"
+
+    # 4. STANDARD CASE: Run the folder normally
     else
       execute_terraform_with_retry "$dir" "$TF_COMMAND"
     fi
