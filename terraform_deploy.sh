@@ -19,27 +19,6 @@ execute_terraform_with_retry() {
   echo "🚀 EXECUTION: Entering directory $GITHUB_WORKSPACE/terraform/$dir"
   cd "$GITHUB_WORKSPACE/terraform/$dir" && terraform init
 
-  # For platform workspace on apply: reconcile orphaned Helm releases into state
-  # before applying to avoid "cannot re-use a name that is still in use" install failures.
-  if [[ "$dir" == "platform" && "${ACTION_TYPE}" != "destroy" ]]; then
-    echo "🔍 Checking for orphaned Helm releases in platform workspace..."
-    if ! terraform state show helm_release.external_secrets >/dev/null 2>&1; then
-      echo "⚠️ helm_release.external_secrets not found in Terraform state. Attempting import..."
-      import_err=""
-      # Import ID format is <namespace>/<release-name>, matching the values defined
-      # in the helm_release.external_secrets resource: name="external-secrets",
-      # namespace="external-secrets" (from kubernetes_namespace_v1.external_secrets).
-      if import_err=$(terraform import helm_release.external_secrets "external-secrets/external-secrets" 2>&1); then
-        echo "✅ Successfully imported helm_release.external_secrets into Terraform state."
-      else
-        echo "ℹ️ Import skipped (release not yet deployed or not accessible - continuing with apply)."
-        [[ -n "$import_err" ]] && echo "   Import details: $import_err"
-      fi
-    else
-      echo "✅ helm_release.external_secrets is already tracked in Terraform state."
-    fi
-  fi
-
   while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
     echo "▶️ Running 'terraform $TF_COMMAND' (Attempt $ATTEMPT of $MAX_ATTEMPTS)..."
 
