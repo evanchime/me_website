@@ -26,6 +26,9 @@ execute_terraform_with_retry() {
     if ! terraform state show helm_release.external_secrets >/dev/null 2>&1; then
       echo "⚠️ helm_release.external_secrets not found in Terraform state. Attempting import..."
       import_err=""
+      # Import ID format is <namespace>/<release-name>, matching the values defined
+      # in the helm_release.external_secrets resource: name="external-secrets",
+      # namespace="external-secrets" (from kubernetes_namespace_v1.external_secrets).
       if import_err=$(terraform import helm_release.external_secrets "external-secrets/external-secrets" 2>&1); then
         echo "✅ Successfully imported helm_release.external_secrets into Terraform state."
       else
