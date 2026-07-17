@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY requirements.txt .
+# Upgrade pip and setuptools to address known security vulnerabilities
+RUN pip install --upgrade "pip>=26.1.2" "setuptools>=83.0.0"
 # Install python packages into a user-specific directory
 RUN pip install --user --no-cache-dir -r requirements.txt
 
@@ -39,6 +41,9 @@ FROM python:3.11-slim-bookworm AS production
 
 # Update OS packages to patch known vulnerabilities first
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and setuptools to address known security vulnerabilities
+RUN pip install --upgrade "pip>=26.1.2" "setuptools>=83.0.0"
 
 # Install runtime dependencies for databases
 RUN apt-get update && apt-get install -y --no-install-recommends \
