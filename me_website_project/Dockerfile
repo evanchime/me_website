@@ -17,6 +17,8 @@ COPY requirements.txt .
 RUN pip install --upgrade "pip>=26.1.2" "setuptools>=83.0.0"
 # Install python packages into a user-specific directory
 RUN pip install --user --no-cache-dir -r requirements.txt
+# Upgrade pip and setuptools in user directory to patch vendored jaraco.context and wheel CVEs
+RUN pip install --user --upgrade "pip>=26.1.2" "setuptools>=83.0.0"
 
 
 # =====================================================================
