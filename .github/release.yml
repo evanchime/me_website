@@ -1,0 +1,36 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - question
+      - wontfix
+      - good first issue
+      - help wanted
+    authors:
+      - github-actions[bot]
+
+  categories:
+    - title: 🚀 Features
+      labels:
+        - enhancement
+
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+
+    - title: 📚 Documentation
+      labels:
+        - documentation
+
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+
+    - title: ⚙️ GitHub Actions / CI
+      labels:
+        - github_actions
+
+    - title: Other Changes
+      labels:
+        - "*"
