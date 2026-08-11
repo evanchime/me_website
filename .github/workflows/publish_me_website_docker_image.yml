@@ -84,7 +84,7 @@ jobs:
           restore_dockerignore() {
             if [[ -f "$DOCKER_IGNORE_BACKUP" ]]; then
               [[ -f "$DOCKER_IGNORE" ]] && mv -f "$DOCKER_IGNORE" "$DOCKER_IGNORE_TEST" || true
-              [[ -f "$DOCKER_IGNORE_BACKUP" ]] && mv -f "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE" || true
+              mv -f "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE" || true
             fi
           }
 
