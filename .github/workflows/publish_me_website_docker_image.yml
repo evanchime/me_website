@@ -81,10 +81,8 @@ jobs:
           DOCKER_IGNORE="me_website_project/.dockerignore"
           DOCKER_IGNORE_TEST="me_website_project/.dockerignore.test"
           DOCKER_IGNORE_BACKUP="me_website_project/.dockerignore.bak"
-          SWAPPED=0
-
           restore_dockerignore() {
-            if [[ "${SWAPPED:-0}" -eq 1 ]]; then
+            if [[ -f "$DOCKER_IGNORE_BACKUP" ]]; then
               [[ -f "$DOCKER_IGNORE" ]] && mv -f "$DOCKER_IGNORE" "$DOCKER_IGNORE_TEST" || true
               [[ -f "$DOCKER_IGNORE_BACKUP" ]] && mv -f "$DOCKER_IGNORE_BACKUP" "$DOCKER_IGNORE" || true
             fi
@@ -96,7 +94,6 @@ jobs:
 
           echo "Swapping .dockerignore for test build..."
           mv "$DOCKER_IGNORE" "$DOCKER_IGNORE_BACKUP"
-          SWAPPED=1
           mv "$DOCKER_IGNORE_TEST" "$DOCKER_IGNORE"
 
           echo "Building test image: $IMAGE_TAG"
